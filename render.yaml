@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: aluno-atleta-api
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build --workspace backend
+    startCommand: npm run start --workspace backend
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: TEACHER_EMAIL
+        sync: false
+      - key: TEACHER_PASSWORD
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET_NAME
+        value: aluno-atleta-uploads
+      - key: R2_ENDPOINT
+        sync: false
