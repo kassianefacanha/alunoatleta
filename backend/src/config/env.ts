@@ -32,16 +32,40 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().min(12),
   TEACHER_EMAIL: z.string().trim().email().transform((email) => email.toLowerCase()),
   TEACHER_PASSWORD: z.string().min(12),
-  FRONTEND_ORIGIN: z.string().url().default('http://localhost:5173'),
+  TEST_STUDENT_EMAIL: z.string().trim().email().transform((email) => email.toLowerCase()).optional(),
+  TEST_STUDENT_PASSWORD: z.string().min(12).optional(),
+  FRONTEND_ORIGIN: z.string().url().default('http://localhost:3000'),
   TERMS_VERSION: z.string().default('2026-01'),
   R2_ACCOUNT_ID: z.string().min(1).optional().or(z.literal('')),
   R2_ACCESS_KEY_ID: z.string().min(1).optional().or(z.literal('')),
   R2_SECRET_ACCESS_KEY: z.string().min(1).optional().or(z.literal('')),
   R2_BUCKET_NAME: z.string().min(1),
   R2_ENDPOINT: z.string().url().optional()
-}).refine((config) => config.ADMIN_EMAIL !== config.TEACHER_EMAIL, {
-  message: 'ADMIN_EMAIL e TEACHER_EMAIL devem ser diferentes.',
-  path: ['TEACHER_EMAIL']
+}).superRefine((config, context) => {
+  if (config.ADMIN_EMAIL === config.TEACHER_EMAIL) {
+    context.addIssue({ code: 'custom', message: 'ADMIN_EMAIL e TEACHER_EMAIL devem ser diferentes.', path: ['TEACHER_EMAIL'] });
+  }
+  if (Boolean(config.TEST_STUDENT_EMAIL) !== Boolean(config.TEST_STUDENT_PASSWORD)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Configure TEST_STUDENT_EMAIL e TEST_STUDENT_PASSWORD juntos.',
+      path: ['TEST_STUDENT_EMAIL']
+    });
+  }
+  if (config.TEST_STUDENT_EMAIL && [config.ADMIN_EMAIL, config.TEACHER_EMAIL].includes(config.TEST_STUDENT_EMAIL)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'A conta de teste deve ter e-mail diferente do administrador e do professor.',
+      path: ['TEST_STUDENT_EMAIL']
+    });
+  }
+  if (config.NODE_ENV === 'production' && (config.TEST_STUDENT_EMAIL || config.TEST_STUDENT_PASSWORD)) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Credenciais de aluno de teste não podem ser configuradas em produção.',
+      path: ['TEST_STUDENT_EMAIL']
+    });
+  }
 });
 
 export const env = envSchema.parse(rawEnv);

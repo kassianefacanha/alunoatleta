@@ -6,11 +6,12 @@ import { Brand } from '../components/atoms/Brand';
 export function HomePage() {
   return (
     <Box className="app-shell">
+      <a className="skip-link" href="#main-content">Pular para o conteúdo</a>
       <Box component="header" className="site-header">
         <Brand />
         <Link component={RouterLink} to="/login" underline="hover" fontWeight={700}>Entrar</Link>
       </Box>
-      <Container maxWidth="lg" sx={{ py: { xs: 4, md: 8 } }}>
+      <Container component="main" id="main-content" tabIndex={-1} maxWidth="lg" sx={{ py: { xs: 4, md: 8 } }}>
         <Box className="hero">
           <Typography variant="overline" sx={{ letterSpacing: 2, opacity: .8 }}>PROJETO ALUNO / ATLETA · ALTO DA MANGUEIRA</Typography>
           <Typography variant="h1" sx={{ fontSize: { xs: '2.7rem', md: '4.5rem' }, maxWidth: 720, lineHeight: 1.05, mt: 2 }}>

@@ -1,6 +1,9 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: #f4f7fa; }
 a { color: inherit; }
+a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [role="menuitem"]:focus-visible, [tabindex="0"]:focus-visible { outline: 3px solid #bd6816; outline-offset: 3px; }
+.skip-link { position: fixed; z-index: 1400; top: 8px; left: 8px; padding: 10px 16px; border-radius: 8px; background: #fff; color: #123d68; font-weight: 700; transform: translateY(-160%); }
+.skip-link:focus { transform: translateY(0); }
 .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
 .registration-layout { width: min(100% - 32px, 920px); margin: 40px auto 64px; }
 .registration-header { text-align: center; margin: 12px auto 28px; max-width: 680px; }

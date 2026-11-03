@@ -4,7 +4,7 @@ import { Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, MenuI
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import { Controller, useForm, useFormState } from 'react-hook-form';
 import { apiRequest, apiBaseUrl, uploadRegistrationFile } from '../../lib/api';
-import { registrationSchema, type RegistrationFormValues } from '../../lib/registrationSchema';
+import { registrationSchema, type RegistrationFormInput, type RegistrationFormValues } from '../../lib/registrationSchema';
 import { FilePicker } from '../atoms/FilePicker';
 import { SectionHeading } from '../atoms/SectionHeading';
 import { FormTextField } from '../molecules/FormTextField';
@@ -18,7 +18,7 @@ const defaultValues = {
 export function RegistrationForm() {
   const [requestError, setRequestError] = useState('');
   const [success, setSuccess] = useState(false);
-  const { control, handleSubmit, setValue, watch, formState: { isSubmitting } } = useForm<RegistrationFormValues>({
+  const { control, handleSubmit, setValue, watch, formState: { isSubmitting } } = useForm<RegistrationFormInput, unknown, RegistrationFormValues>({
     resolver: zodResolver(registrationSchema),
     defaultValues,
     mode: 'onBlur'

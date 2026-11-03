@@ -23,7 +23,7 @@ export const registrationSchema = z.object({
   fullName: z.string().trim().min(3, 'Informe o nome completo.'),
   age: z.coerce.number().int().min(0, 'Informe uma idade válida.').max(120),
   birthDate: z.string().regex(datePattern, 'Use o formato dd/mm/aaaa.').refine((value) => parseBrazilianDate(value) !== null, 'Informe uma data válida.'),
-  sex: z.enum(['Feminino', 'Masculino', 'Outro', 'Prefiro não informar'], { required_error: 'Selecione uma opção.' }),
+  sex: z.enum(['Feminino', 'Masculino', 'Outro', 'Prefiro não informar'], { message: 'Selecione uma opção.' }),
   modality: z.string().min(1, 'Selecione uma modalidade.'),
   school: z.string().trim().min(1, 'Informe a escola.'),
   neighborhood: z.string().trim().min(1, 'Informe o bairro.'),
@@ -37,7 +37,7 @@ export const registrationSchema = z.object({
   signedForm: z.instanceof(File, { message: 'A ficha assinada é obrigatória.' })
     .refine((file) => file.type === 'application/pdf' && file.name.toLowerCase().endsWith('.pdf'), 'Envie a ficha em PDF.')
     .refine((file) => file.size <= 10 * 1024 * 1024, 'A ficha deve ter no máximo 10 MB.'),
-  acceptedTerms: z.literal(true, { errorMap: () => ({ message: 'O aceite dos termos é obrigatório.' }) })
+  acceptedTerms: z.literal(true, { message: 'O aceite dos termos é obrigatório.' })
 }).superRefine((values, ctx) => {
   const birthDate = parseBrazilianDate(values.birthDate);
   if (birthDate && Math.abs(calculateAge(birthDate) - values.age) > 1) {
@@ -48,4 +48,5 @@ export const registrationSchema = z.object({
   }
 });
 
-export type RegistrationFormValues = z.infer<typeof registrationSchema>;
+export type RegistrationFormInput = z.input<typeof registrationSchema>;
+export type RegistrationFormValues = z.output<typeof registrationSchema>;

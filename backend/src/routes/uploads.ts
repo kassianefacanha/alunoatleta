@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js';
-import { SportsClass, Student } from '../models/index.js';
+import { requireAuth, requireRoles, requireTeacherPermission, type AuthenticatedRequest } from '../middleware/auth.js';
+import { Material, SportsClass, Student } from '../models/index.js';
 import { createDownloadUrl, createUploadUrl, inspectObject } from '../services/storage.js';
 
 export const uploadsRouter = Router();
@@ -58,6 +58,70 @@ uploadsRouter.post('/presign', requireAuth, async (req: AuthenticatedRequest, re
     }
     const key = `students/${student.id}/form/${randomUUID()}`;
     res.json({ uploadUrl: await createUploadUrl(key, input.contentType, input.fileSize), key, expiresIn: 300 });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const materialTypes = {
+  'application/pdf': ['pdf'],
+  'image/jpeg': ['jpg', 'jpeg'],
+  'image/png': ['png']
+} as const;
+const materialMaxSize = 10 * 1024 * 1024;
+
+uploadsRouter.post('/materials/presign', requireAuth, requireRoles('admin', 'teacher'), requireTeacherPermission('materials:write'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const input = z.object({
+      classId: z.string().regex(/^[a-f\d]{24}$/i),
+      fileName: z.string().trim().min(1).max(180),
+      contentType: z.enum(['application/pdf', 'image/jpeg', 'image/png']),
+      fileSize: z.number().int().positive().max(materialMaxSize)
+    }).parse(req.body);
+    const extension = input.fileName.split('.').pop()?.toLowerCase();
+    if (!extension || !(materialTypes[input.contentType] as readonly string[]).includes(extension)) {
+      res.status(422).json({ error: 'A extensão do arquivo não corresponde ao tipo permitido.' });
+      return;
+    }
+    const sportsClass = await SportsClass.findById(input.classId).select('teacherId');
+    if (!sportsClass || (req.auth?.role === 'teacher' && sportsClass.teacherId.toString() !== req.auth.userId)) {
+      res.status(403).json({ error: 'Você não pode enviar materiais para esta turma.' });
+      return;
+    }
+    const key = `materials/${sportsClass.id}/${randomUUID()}`;
+    res.json({
+      uploadUrl: await createUploadUrl(key, input.contentType, input.fileSize),
+      key,
+      expiresIn: 300
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+uploadsRouter.get('/materials/:materialId/download', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const materialId = z.string().regex(/^[a-f\d]{24}$/i).parse(req.params.materialId);
+    const material = await Material.findById(materialId).select('classId fileKey').lean();
+    if (!material?.fileKey) {
+      res.status(404).json({ error: 'Arquivo do material não encontrado.' });
+      return;
+    }
+    if (req.auth?.role !== 'admin') {
+      const sportsClass = await SportsClass.findById(material.classId).select('teacherId studentIds').lean();
+      const allowed = sportsClass && (req.auth?.role === 'teacher'
+        ? sportsClass.teacherId.toString() === req.auth.userId
+        : await Student.exists({
+          userId: req.auth?.userId,
+          enrollmentStatus: 'approved',
+          classIds: material.classId
+        }));
+      if (!allowed) {
+        res.status(403).json({ error: 'Você não pode acessar este material.' });
+        return;
+      }
+    }
+    res.json({ downloadUrl: await createDownloadUrl(material.fileKey), expiresIn: 600 });
   } catch (error) {
     next(error);
   }

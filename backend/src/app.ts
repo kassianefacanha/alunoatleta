@@ -17,7 +17,7 @@ app.use(helmet());
 app.use(cors({
   origin: (origin, callback) => {
     const allowed = !origin || origin === new URL(env.FRONTEND_ORIGIN).origin ||
-      (env.NODE_ENV !== 'production' && origin === 'http://localhost:5173');
+      (env.NODE_ENV !== 'production' && origin === 'http://localhost:3000');
     callback(allowed ? null : new Error('Origem não permitida pelo CORS.'), allowed);
   },
   credentials: true

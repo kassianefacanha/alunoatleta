@@ -92,7 +92,8 @@ const materialSchema = new Schema({
   title: { type: String, required: true },
   body: { type: String },
   url: { type: String },
-  fileKey: { type: String }
+  fileKey: { type: String },
+  fileName: { type: String }
 }, timestamps);
 
 const lessonPlanSchema = new Schema({

@@ -7,7 +7,7 @@ export interface AuthenticatedRequest extends Request {
   auth?: { userId: string; role: UserRole };
 }
 
-export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): void {
+export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
   const header = req.header('authorization');
   const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
   if (!token) {
@@ -22,10 +22,24 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
       return;
     }
     req.auth = { userId: claims.sub, role: claims.role as UserRole };
-    next();
   } catch {
     res.status(401).json({ error: 'Token de acesso inválido ou expirado.' });
+    return;
   }
+
+  if (req.auth.role === 'teacher') {
+    try {
+      const activeTeacher = await User.exists({ _id: req.auth.userId, role: 'teacher', isActive: true });
+      if (!activeTeacher) {
+        res.status(401).json({ error: 'A conta está inativa ou não existe.' });
+        return;
+      }
+    } catch (error) {
+      next(error);
+      return;
+    }
+  }
+  next();
 }
 
 export function requireRoles(...roles: UserRole[]) {
