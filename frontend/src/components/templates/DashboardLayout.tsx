@@ -8,11 +8,14 @@ import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import { Brand } from '../atoms/Brand';
+import { hasPermission, type TeacherPermission } from '../../lib/permissions';
+import { logoutSession } from '../../lib/api';
 
 interface NavigationItem {
   label: string;
   path: string;
   roles: string[];
+  permission?: TeacherPermission;
 }
 
 interface NavigationGroup {
@@ -24,42 +27,66 @@ const navigationGroups: NavigationGroup[] = [
   {
     label: 'Gestão',
     items: [
-      { label: 'Alunos e inscrições', path: '/alunos', roles: ['admin', 'teacher'] },
+      { label: 'Alunos e inscrições', path: '/alunos', roles: ['admin', 'teacher'], permission: 'students:read' },
       { label: 'Turmas e professores', path: '/turmas', roles: ['admin', 'teacher'] },
-      { label: 'Chamada', path: '/chamadas', roles: ['admin', 'teacher'] }
+      { label: 'Chamada', path: '/chamadas', roles: ['admin', 'teacher'], permission: 'attendance:write' }
     ]
   },
   {
     label: 'Atividades',
     items: [
-      { label: 'Tarefas e entregas', path: '/tarefas', roles: ['admin', 'teacher', 'student'] },
+      { label: 'Tarefas e entregas', path: '/tarefas', roles: ['admin', 'teacher', 'student'], permission: 'assignments:read' },
       { label: 'Materiais e avisos', path: '/materiais-avisos', roles: ['admin', 'teacher', 'student'] },
       { label: 'Eventos e avaliações', path: '/eventos-avaliacoes', roles: ['admin', 'teacher', 'student'] },
-      { label: 'Rede social', path: '/rede-social', roles: ['admin', 'teacher', 'student'] }
+      { label: 'Rede social', path: '/rede-social', roles: ['admin', 'teacher', 'student'], permission: 'social:read' }
     ]
   },
   {
     label: 'Relatórios',
     items: [
-      { label: 'Exportações', path: '/exportacoes', roles: ['admin', 'teacher'] },
+      { label: 'Exportações', path: '/exportacoes', roles: ['admin', 'teacher'], permission: 'exports:read' },
       { label: 'Auditoria', path: '/auditoria', roles: ['admin'] }
     ]
   }
 ];
 
-export function DashboardLayout({ children, onLogout, name }: { children: React.ReactNode; onLogout: () => void; name: string }) {
+const pageTitles: Record<string, string> = {
+  '/alunos': 'Alunos e inscrições',
+  '/turmas': 'Turmas e professores',
+  '/chamadas': 'Chamada e presenças',
+  '/tarefas': 'Tarefas e entregas',
+  '/materiais-avisos': 'Materiais e avisos',
+  '/eventos-avaliacoes': 'Eventos, aulas e avaliações',
+  '/rede-social': 'Rede social da turma',
+  '/meu-perfil': 'Meu perfil e desenvolvimento',
+  '/auditoria': 'Logs de auditoria',
+  '/exportacoes': 'Exportar dados',
+  '/corrigir-inscricao': 'Corrigir inscrição',
+  '/status': 'Situação da inscrição'
+};
+
+export function DashboardLayout({ children, onLogout, name, pageTitle }: { children: React.ReactNode; onLogout: () => void; name: string; pageTitle?: string }) {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
   const [mobileGroupOpen, setMobileGroupOpen] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [logoutLoading, setLogoutLoading] = useState(false);
   const user = JSON.parse(sessionStorage.getItem('user') ?? '{}') as { role?: string };
   const enrollment = JSON.parse(sessionStorage.getItem('enrollment') ?? '{}') as { status?: string };
   const groups = navigationGroups
-    .map((group) => ({ ...group, items: group.items.filter((item) => item.roles.includes(user.role ?? '')) }))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) =>
+        item.roles.includes(user.role ?? '') && (!item.permission || hasPermission(item.permission))
+      )
+    }))
     .filter((group) => group.items.length > 0);
   const showNavigation = user.role !== 'student' || enrollment.status === 'approved';
   const showStudentProfile = user.role === 'student' && enrollment.status === 'approved';
+  const resolvedPageTitle = pageTitle ?? (location.pathname === '/app'
+    ? user.role === 'admin' ? 'Visão geral do sistema' : user.role === 'teacher' ? 'Sua turma em foco' : 'Sua jornada esportiva'
+    : pageTitles[location.pathname] ?? '');
   const isSelected = (path: string) => location.pathname === path;
   const isGroupSelected = (group: NavigationGroup) => group.items.some((item) => isSelected(item.path));
 
@@ -74,6 +101,22 @@ export function DashboardLayout({ children, onLogout, name }: { children: React.
     setActiveGroup(null);
     setMenuAnchor(null);
   };
+
+  async function handleLogout() {
+    if (logoutLoading) return;
+    setLogoutLoading(true);
+    let revocationFailed = false;
+    try {
+      await logoutSession();
+    } catch {
+      revocationFailed = true;
+    } finally {
+      onLogout();
+    }
+    if (revocationFailed) {
+      sessionStorage.setItem('logoutNotice', 'A sessão foi encerrada neste dispositivo, mas não foi possível confirmar a revogação no servidor.');
+    }
+  }
 
   return (
     <Box className="app-shell">
@@ -95,10 +138,21 @@ export function DashboardLayout({ children, onLogout, name }: { children: React.
             )}
             <Brand compact />
           </Box>
+          {resolvedPageTitle && (
+            <Typography
+              component="h1"
+              variant="h6"
+              fontWeight={800}
+              noWrap
+              sx={{ flex: 1, minWidth: 0, mx: { xs: 1, sm: 2 }, fontSize: { xs: '0.95rem', sm: '1.25rem' } }}
+            >
+              {resolvedPageTitle}
+            </Typography>
+          )}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 2 }, minWidth: 0 }}>
-            <Typography variant="body2" color="text.secondary" noWrap sx={{ maxWidth: { xs: 72, sm: 240 } }}>{name}</Typography>
+            <Typography variant="body2" color="text.secondary" noWrap sx={{ display: { xs: 'none', sm: 'block' }, maxWidth: 240 }}>{name}</Typography>
             <Tooltip title="Sair da conta">
-              <Button size="small" startIcon={<LogoutRoundedIcon />} onClick={onLogout} aria-label="Sair da conta">
+              <Button size="small" startIcon={<LogoutRoundedIcon />} onClick={() => void handleLogout()} disabled={logoutLoading} aria-label="Sair da conta">
                 <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Sair</Box>
               </Button>
             </Tooltip>

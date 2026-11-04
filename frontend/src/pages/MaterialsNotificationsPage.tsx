@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { DashboardLayout } from '../components/templates/DashboardLayout';
 import { apiRequest, uploadMaterialFile } from '../lib/api';
+import { hasPermission } from '../lib/permissions';
 
 interface SportsClass {
   _id: string;
@@ -50,7 +51,9 @@ function validHttpUrl(value: string) {
 export function MaterialsNotificationsPage() {
   const navigate = useNavigate();
   const user = JSON.parse(sessionStorage.getItem('user') ?? '{"email":"Usuário","role":"student"}') as { email: string; role: string };
-  const canPublish = user.role === 'admin' || user.role === 'teacher';
+  const canPublishMaterial = user.role === 'admin' || (user.role === 'teacher' && hasPermission('materials:write'));
+  const canSendNotification = user.role === 'admin' || (user.role === 'teacher' && hasPermission('notifications:write'));
+  const canPublish = canPublishMaterial || canSendNotification;
   const [classes, setClasses] = useState<SportsClass[]>([]);
   const [materials, setMaterials] = useState<MaterialRecord[]>([]);
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
@@ -215,7 +218,6 @@ export function MaterialsNotificationsPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>COMUNICAÇÃO</Typography>
-          <Typography variant="h4" fontWeight={800}>Materiais e avisos</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
             {canPublish ? 'Compartilhe conteúdos e comunicados com as turmas.' : 'Consulte os materiais e comunicados recebidos das suas turmas.'}
           </Typography>
@@ -226,12 +228,12 @@ export function MaterialsNotificationsPage() {
 
         {canPublish && (
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-            <Button variant="contained" onClick={() => setMaterialDialogOpen(true)} disabled={loading || classes.length === 0}>
+            {canPublishMaterial && <Button variant="contained" onClick={() => setMaterialDialogOpen(true)} disabled={loading || classes.length === 0}>
               Publicar material
-            </Button>
-            <Button variant="outlined" onClick={() => setNotificationDialogOpen(true)} disabled={loading || classes.length === 0}>
+            </Button>}
+            {canSendNotification && <Button variant="outlined" onClick={() => setNotificationDialogOpen(true)} disabled={loading || classes.length === 0}>
               Enviar aviso
-            </Button>
+            </Button>}
             {classes.length === 0 && !loading && <Alert severity="info">Cadastre uma turma para publicar conteúdo.</Alert>}
           </Stack>
         )}

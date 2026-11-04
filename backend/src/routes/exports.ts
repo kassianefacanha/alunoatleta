@@ -187,7 +187,7 @@ exportsRouter.get('/students', async (req: AuthenticatedRequest, res, next) => {
       res.status(422).json({ error: 'Selecione ao menos uma coluna válida.' });
       return;
     }
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { isArchived: { $ne: true } };
     if (query.name) filter.fullName = { $regex: escapeRegex(query.name), $options: 'i' };
     if (query.status) filter.enrollmentStatus = query.status;
     if (query.modality) filter.modality = query.modality;

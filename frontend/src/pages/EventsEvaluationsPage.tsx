@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { DashboardLayout } from '../components/templates/DashboardLayout';
 import { apiRequest } from '../lib/api';
+import { hasPermission } from '../lib/permissions';
 
 interface SportsClass {
   _id: string;
@@ -76,7 +77,11 @@ function formatDate(value: string) {
 export function EventsEvaluationsPage() {
   const navigate = useNavigate();
   const user = JSON.parse(sessionStorage.getItem('user') ?? '{"email":"Usuário","role":"student"}') as { email: string; role: string };
-  const canManage = user.role === 'admin' || user.role === 'teacher';
+  const canCreateEvents = user.role === 'admin' || (user.role === 'teacher' && hasPermission('events:write'));
+  const canEvaluate = user.role === 'admin' || (user.role === 'teacher' && hasPermission('evaluations:write'));
+  const canReadStudents = user.role === 'admin' || (user.role === 'teacher' && hasPermission('students:read'));
+  const canLoadEvaluationStudents = canEvaluate && canReadStudents;
+  const canManage = canCreateEvents || canEvaluate;
   const [classes, setClasses] = useState<SportsClass[]>([]);
   const [students, setStudents] = useState<StudentRecord[]>([]);
   const [events, setEvents] = useState<EventRecord[]>([]);
@@ -112,7 +117,7 @@ export function EventsEvaluationsPage() {
         apiRequest<{ events: EventRecord[] }>(`/events${suffix}`),
         apiRequest<{ lessonPlans: LessonPlanRecord[] }>(`/lesson-plans${suffix}`),
         apiRequest<{ evaluations: EvaluationRecord[] }>(`/evaluations${suffix}`),
-        canManage ? apiRequest<{ students: StudentRecord[] }>('/students') : Promise.resolve({ students: [] })
+        canLoadEvaluationStudents ? apiRequest<{ students: StudentRecord[] }>('/students') : Promise.resolve({ students: [] })
       ]);
       setClasses(classResult.classes);
       setStudents(studentResult.students.filter((student) => student.enrollmentStatus === 'approved'));
@@ -240,9 +245,16 @@ export function EventsEvaluationsPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>VIDA DA TURMA</Typography>
-          <Typography variant="h4" fontWeight={800}>Eventos, aulas e avaliações</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            {canManage ? 'Organize eventos, registre planos de aula e acompanhe o desenvolvimento dos atletas.' : 'Consulte a programação e acompanhe seu desenvolvimento esportivo.'}
+            {user.role === 'student'
+              ? 'Consulte a programação e acompanhe seu desenvolvimento esportivo.'
+              : canCreateEvents && canEvaluate && canReadStudents
+                ? 'Organize eventos, registre planos de aula e acompanhe o desenvolvimento dos atletas.'
+                : canCreateEvents
+                  ? 'Divulgue eventos e organize planos de aula para suas turmas.'
+                  : canEvaluate && canReadStudents
+                    ? 'Registre avaliações e acompanhe o desenvolvimento dos atletas.'
+                    : 'Consulte a programação e os planos de aula das suas turmas.'}
           </Typography>
         </Box>
 
@@ -267,10 +279,11 @@ export function EventsEvaluationsPage() {
 
         {canManage && (
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-            <Button variant="contained" onClick={() => setEventDialogOpen(true)} disabled={loading || !classId}>Divulgar evento</Button>
-            <Button variant="outlined" onClick={() => setPlanDialogOpen(true)} disabled={loading || !classId}>Registrar plano de aula</Button>
-            <Button variant="outlined" onClick={() => setEvaluationDialogOpen(true)} disabled={loading || !classId || classStudents.length === 0}>Avaliar atleta</Button>
+            {canCreateEvents && <Button variant="contained" onClick={() => setEventDialogOpen(true)} disabled={loading || !classId}>Divulgar evento</Button>}
+            {canCreateEvents && <Button variant="outlined" onClick={() => setPlanDialogOpen(true)} disabled={loading || !classId}>Registrar plano de aula</Button>}
+            {canEvaluate && canReadStudents && <Button variant="outlined" onClick={() => setEvaluationDialogOpen(true)} disabled={loading || !classId || classStudents.length === 0}>Avaliar atleta</Button>}
             {classes.length === 0 && !loading && <Alert severity="info">Cadastre uma turma para registrar atividades.</Alert>}
+            {canEvaluate && !canReadStudents && <Alert severity="info">Para avaliar atletas, também é necessário ter permissão para consultar alunos.</Alert>}
           </Stack>
         )}
 
@@ -322,7 +335,7 @@ export function EventsEvaluationsPage() {
         </Grid>
 
         <Paper variant="outlined" sx={{ p: { xs: 2, md: 3 } }}>
-          <Typography variant="h6" fontWeight={750} sx={{ mb: 2 }}>{canManage ? 'Avaliações registradas' : 'Meu desenvolvimento'}</Typography>
+          <Typography variant="h6" fontWeight={750} sx={{ mb: 2 }}>{user.role === 'student' ? 'Meu desenvolvimento' : 'Avaliações registradas'}</Typography>
           {loading ? <CircularProgress size={24} /> : visibleEvaluations.length === 0 ? (
             <Typography color="text.secondary">Nenhuma avaliação registrada.</Typography>
           ) : (

@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { DashboardLayout } from '../components/templates/DashboardLayout';
 import { apiRequest } from '../lib/api';
+import { hasPermission } from '../lib/permissions';
 
 interface SportsClass {
   _id: string;
@@ -61,7 +62,8 @@ function validHttpUrl(value: string) {
 export function SocialPage() {
   const navigate = useNavigate();
   const user = JSON.parse(sessionStorage.getItem('user') ?? '{"id":"","email":"Usuário","role":"student"}') as { id: string; email: string; role: string };
-  const canPost = user.role === 'admin' || user.role === 'teacher' || user.role === 'student';
+  const canInteract = user.role !== 'teacher' || hasPermission('social:write');
+  const canPost = canInteract;
   const [classes, setClasses] = useState<SportsClass[]>([]);
   const [classId, setClassId] = useState('');
   const [posts, setPosts] = useState<SocialPost[]>([]);
@@ -204,9 +206,10 @@ export function SocialPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>COMUNIDADE</Typography>
-          <Typography variant="h4" fontWeight={800}>Rede social da turma</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Compartilhe mensagens e links com os membros da sua turma. Publicações não aceitam fotos ou arquivos.
+            {canInteract
+              ? 'Compartilhe mensagens e links com os membros da sua turma. Publicações não aceitam fotos ou arquivos.'
+              : 'Consulte as publicações da sua turma. Sua conta não tem permissão para interagir.'}
           </Typography>
         </Box>
 
@@ -274,9 +277,9 @@ export function SocialPage() {
                         )}
                       </CardContent>
                       <CardActions sx={{ px: 2, pb: 1 }}>
-                        <Button size="small" disabled={likingId === post._id} onClick={() => void toggleLike(post)}>
+                        {canInteract && <Button size="small" disabled={likingId === post._id} onClick={() => void toggleLike(post)}>
                           {liked ? 'Descurtir' : 'Curtir'} · {post.likedBy.length}
-                        </Button>
+                        </Button>}
                         <Typography variant="body2" color="text.secondary">{post.comments.length} comentários</Typography>
                       </CardActions>
                       <CardContent sx={{ pt: 0 }}>
@@ -296,7 +299,7 @@ export function SocialPage() {
                             })}
                           </Stack>
                         )}
-                        <Box component="form" onSubmit={(event) => void addComment(post._id, event)} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                        {canInteract && <Box component="form" onSubmit={(event) => void addComment(post._id, event)} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                           <TextField
                             size="small"
                             label="Escreva um comentário"
@@ -309,7 +312,7 @@ export function SocialPage() {
                           <Button type="submit" variant="outlined" disabled={commentingId === post._id || !(commentDrafts[post._id] ?? '').trim()}>
                             {commentingId === post._id ? 'Enviando...' : 'Comentar'}
                           </Button>
-                        </Box>
+                        </Box>}
                       </CardContent>
                     </Card>
                   </Grid>

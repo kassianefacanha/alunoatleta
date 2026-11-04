@@ -9,11 +9,14 @@ export function StatusPage() {
   const enrollment = JSON.parse(sessionStorage.getItem('enrollment') ?? '{"status":"pending"}') as { status: string; rejectionReason?: string };
   const rejected = enrollment.status === 'rejected';
   return (
-    <DashboardLayout name={user.email} onLogout={() => { sessionStorage.clear(); navigate('/login'); }}>
+    <DashboardLayout
+      name={user.email}
+      onLogout={() => { sessionStorage.clear(); navigate('/login'); }}
+      pageTitle={rejected ? 'Sua inscrição precisa de ajustes' : 'Sua inscrição está em análise'}
+    >
       <Box sx={{ maxWidth: 680, mx: 'auto', mt: 5 }}>
         <Paper variant="outlined" sx={{ p: { xs: 3, md: 5 }, textAlign: 'center' }}>
           <HourglassTopRoundedIcon color={rejected ? 'error' : 'primary'} sx={{ fontSize: 48, mb: 1 }} />
-          <Typography variant="h4" fontWeight={800}>{rejected ? 'Sua inscrição precisa de ajustes' : 'Sua inscrição está em análise'}</Typography>
           <Typography color="text.secondary" sx={{ mt: 1.5 }}>
             {rejected ? 'Revise as informações e envie novamente para nossa equipe.' : 'Assim que o professor analisar seus documentos, você receberá uma atualização.'}
           </Typography>

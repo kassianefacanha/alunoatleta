@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
-  FormControl, Grid, IconButton, InputLabel, MenuItem, Paper, Select, Stack, TextField, Tooltip, Typography,
+  Checkbox, FormControl, FormControlLabel, Grid, IconButton, InputLabel, MenuItem, Paper, Select, Stack, TextField, Tooltip, Typography,
   useMediaQuery
 } from '@mui/material';
 import { DataGrid, type GridColDef } from '@mui/x-data-grid';
@@ -161,21 +161,27 @@ export function AttendancePage() {
     {
       field: 'status',
       headerName: 'Situação',
-      minWidth: isMobile ? 145 : 180,
+      minWidth: isMobile ? 220 : 265,
       flex: 0.8,
       sortable: false,
       renderCell: ({ row }) => (
-        <FormControl fullWidth size="small" required>
-          <Select
-            value={row.status}
-            displayEmpty
-            inputProps={{ 'aria-label': `Situação de ${row.fullName}` }}
-            onChange={(event) => updateEntry(row.studentId, { status: event.target.value as AttendanceStatus })}
-          >
-            <MenuItem value=""><em>Selecione</em></MenuItem>
-            {Object.entries(statusLabels).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
-          </Select>
-        </FormControl>
+        <Stack direction="row" spacing={0.25} useFlexGap flexWrap="wrap">
+          {(Object.entries(statusLabels) as Array<[SavedAttendanceStatus, string]>).map(([value, label]) => (
+        <FormControlLabel
+          key={value}
+          sx={{ mr: 0.5, '& .MuiFormControlLabel-label': { fontSize: '0.8rem' } }}
+          control={
+            <Checkbox
+              size="small"
+              checked={row.status === value}
+              inputProps={{ 'aria-label': `${label} — ${row.fullName}` }}
+              onChange={(event) => updateEntry(row.studentId, { status: event.target.checked ? value : '' })}
+            />
+          }
+          label={label}
+        />
+          ))}
+        </Stack>
       )
     },
     {
@@ -226,7 +232,6 @@ export function AttendancePage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>GESTÃO DA TURMA</Typography>
-          <Typography variant="h4" fontWeight={800}>Chamada e presenças</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>Escolha a turma e a data; marque a situação de cada aluno e salve.</Typography>
         </Box>
 

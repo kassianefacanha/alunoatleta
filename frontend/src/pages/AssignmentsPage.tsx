@@ -8,6 +8,7 @@ import {
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import { DashboardLayout } from '../components/templates/DashboardLayout';
 import { apiRequest } from '../lib/api';
+import { hasPermission } from '../lib/permissions';
 
 interface SportsClass {
   _id: string;
@@ -40,7 +41,8 @@ function formatDate(value?: string) {
 export function AssignmentsPage() {
   const navigate = useNavigate();
   const user = JSON.parse(sessionStorage.getItem('user') ?? '{"email":"Usuário","role":"student"}') as { email: string; role: string };
-  const canCreate = user.role === 'admin' || user.role === 'teacher';
+  const canCreate = user.role === 'admin' || (user.role === 'teacher' && hasPermission('assignments:write'));
+  const canViewSubmissions = user.role === 'admin' || user.role === 'teacher';
   const isStudent = user.role === 'student';
   const [classes, setClasses] = useState<SportsClass[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRecord[]>([]);
@@ -168,9 +170,12 @@ export function AssignmentsPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>ATIVIDADES</Typography>
-          <Typography variant="h4" fontWeight={800}>Tarefas e entregas</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            {isStudent ? 'Consulte as atividades da sua turma e acompanhe suas respostas.' : 'Publique atividades e consulte as respostas enviadas pelos alunos.'}
+            {isStudent
+              ? 'Consulte as atividades da sua turma e acompanhe suas respostas.'
+              : canCreate
+                ? 'Publique atividades e consulte as respostas enviadas pelos alunos.'
+                : 'Consulte as atividades das suas turmas e acompanhe as entregas.'}
           </Typography>
         </Box>
 
@@ -256,7 +261,7 @@ export function AssignmentsPage() {
                             </Box>
                           </>
                         )}
-                        {canCreate && assignment.responseType === 'text' && (
+                        {canViewSubmissions && assignment.responseType === 'text' && (
                           <Button variant="outlined" sx={{ alignSelf: 'flex-start' }} onClick={() => void viewSubmissions(assignment)}>
                             Ver entregas
                           </Button>

@@ -8,7 +8,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "seed:users": "tsx src/scripts/bootstrapUsers.ts"
+    "test": "tsx --test src/services/criticalFlows.test.ts src/config/securityRules.test.ts",
+    "seed:users": "tsx src/scripts/bootstrapUsers.ts",
+    "seed:demo": "tsx src/scripts/seedDemoData.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",

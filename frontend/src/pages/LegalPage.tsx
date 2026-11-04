@@ -1,5 +1,5 @@
 import { Link as RouterLink } from 'react-router-dom';
-import { Box, Link, Paper, Typography } from '@mui/material';
+import { Alert, Box, Link, Paper, Typography } from '@mui/material';
 import { PublicLayout } from '../components/templates/PublicLayout';
 
 const documents = {
@@ -18,7 +18,7 @@ const documents = {
       ['Dados tratados', 'Para inscrição e acompanhamento, o sistema pode tratar nome, data de nascimento, idade, sexo, e-mail, escola, endereço, telefone do responsável, foto, ficha assinada, registros de presença, tarefas, avaliações e interações da turma.'],
       ['Finalidades', 'Os dados são usados para analisar inscrições, administrar turmas e atividades, manter a segurança da conta e registrar o acompanhamento educacional e esportivo. O aceite é registrado com data e hora, endereço IP e versão do termo.'],
       ['Armazenamento e acesso', 'Dados estruturados são mantidos no sistema e documentos ficam em armazenamento privado. O acesso é limitado de acordo com o papel do usuário e o vínculo com a turma. Documentos são disponibilizados por links temporários autenticados.'],
-      ['Direitos e contato', 'O titular ou responsável pode solicitar confirmação, acesso, correção ou demais direitos previstos na LGPD ao administrador do projeto. Antes da entrada em produção, publique um canal oficial de contato e confirme prazos e política de retenção com a equipe responsável.']
+      ['Direitos, controlador e contato', 'O projeto informou “Atleta Aluno” como controlador e atletaaluno@suporte.gmail.com como canal de contato. O titular ou responsável pode usar esse canal para solicitar confirmação, acesso, correção ou demais direitos previstos na LGPD. A identificação jurídica do controlador, as bases legais por finalidade e os prazos de retenção e exclusão ainda precisam ser formalizados e validados antes da coleta oficial.']
     ]
   }
 } as const;
@@ -31,7 +31,11 @@ export function LegalPage({ document }: { document: keyof typeof documents }) {
       <Box sx={{ maxWidth: 760, mx: 'auto', my: { xs: 3, md: 6 }, px: 2 }}>
         <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 4 } }}>
           <Typography variant="h3" sx={{ mb: 1 }}>{content.title}</Typography>
-          <Typography color="warning.dark" variant="body2" sx={{ mb: 3 }}>Versão inicial do sistema — revise e valide este conteúdo antes do uso oficial.</Typography>
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            {document === 'politica-de-privacidade'
+              ? 'Política em rascunho. Não use para coleta oficial antes de confirmar a identificação jurídica do controlador e o canal de contato, definir bases legais e prazos de retenção e validar o texto com assessoria jurídica, especialmente por envolver menores.'
+              : 'Termos em rascunho. Valide o texto com a equipe responsável e assessoria jurídica antes do uso oficial.'}
+          </Alert>
           {content.sections.map(([title, text]) => (
             <Box key={title} sx={{ mb: 2.5 }}>
               <Typography variant="h6" fontWeight={750}>{title}</Typography>

@@ -1,20 +1,30 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { Alert, Box, Button, Link, Paper, TextField, Typography } from '@mui/material';
 import { PublicLayout } from '../components/templates/PublicLayout';
 import { apiRequest } from '../lib/api';
+import type { TeacherPermission } from '../lib/permissions';
 
 interface LoginResponse {
   accessToken: string;
   refreshToken: string;
-  user: { id: string; email: string; role: string };
+  user: { id: string; email: string; role: string; teacherPermissions?: TeacherPermission[] };
   enrollment?: { status: string; rejectionReason?: string };
 }
 
 export function LoginPage() {
   const navigate = useNavigate();
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const logoutNotice = sessionStorage.getItem('logoutNotice');
+    if (logoutNotice) {
+      setNotice(logoutNotice);
+      sessionStorage.removeItem('logoutNotice');
+    }
+  }, []);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,6 +39,7 @@ export function LoginPage() {
       sessionStorage.setItem('accessToken', result.accessToken);
       sessionStorage.setItem('refreshToken', result.refreshToken);
       sessionStorage.setItem('user', JSON.stringify(result.user));
+      sessionStorage.removeItem('logoutNotice');
       if (result.enrollment) sessionStorage.setItem('enrollment', JSON.stringify(result.enrollment));
       navigate(result.enrollment?.status === 'approved' || !result.enrollment ? '/app' : '/status');
     } catch (reason) {
@@ -44,6 +55,7 @@ export function LoginPage() {
         <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography variant="h4" fontWeight={800}>Boas-vindas de volta</Typography>
           <Typography color="text.secondary" sx={{ mt: 1, mb: 3 }}>Entre para acompanhar sua jornada no esporte.</Typography>
+          {notice && <Alert severity="warning" sx={{ mb: 2 }}>{notice}</Alert>}
           <Box component="form" onSubmit={submit} sx={{ display: 'grid', gap: 2 }}>
             <TextField name="email" label="E-mail" type="email" autoComplete="email" required />
             <TextField name="password" label="Senha" type="password" autoComplete="current-password" required />

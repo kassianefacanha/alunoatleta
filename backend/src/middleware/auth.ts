@@ -27,17 +27,23 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     return;
   }
 
-  if (req.auth.role === 'teacher') {
-    try {
-      const activeTeacher = await User.exists({ _id: req.auth.userId, role: 'teacher', isActive: true });
-      if (!activeTeacher) {
-        res.status(401).json({ error: 'A conta está inativa ou não existe.' });
-        return;
-      }
-    } catch (error) {
-      next(error);
+  try {
+    const activeUser = await User.findOne({
+      _id: req.auth.userId,
+      role: req.auth.role,
+      isActive: true,
+      isArchived: { $ne: true }
+    }).select('+refreshTokenHash').lean();
+    const activeStudent = req.auth.role === 'student'
+      ? await Student.exists({ userId: req.auth.userId, isArchived: { $ne: true } })
+      : true;
+    if (!activeUser?.refreshTokenHash || !activeStudent) {
+      res.status(401).json({ error: 'A conta ou sessão está inativa.' });
       return;
     }
+  } catch (error) {
+    next(error);
+    return;
   }
   next();
 }

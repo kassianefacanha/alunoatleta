@@ -97,7 +97,6 @@ export function ResubmissionPage() {
     <DashboardLayout name={profile.user.email} onLogout={() => { sessionStorage.clear(); navigate('/login'); }}>
       <Box sx={{ maxWidth: 760, mx: 'auto' }}>
         <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 4 } }}>
-          <Typography variant="h4" fontWeight={800}>Corrigir inscrição</Typography>
           <Typography color="text.secondary" sx={{ mt: 1, mb: 3 }}>Revise os dados indicados pelo professor e reenvie para análise. A foto do aluno não pode ser alterada.</Typography>
           <Box component="form" onSubmit={submit} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <TextField name="fullName" label="Nome completo do aluno" defaultValue={student.fullName} required sx={{ gridColumn: '1 / -1' }} />

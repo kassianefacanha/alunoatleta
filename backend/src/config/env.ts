@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotEnv } from 'dotenv';
 import { z } from 'zod';
+import { getSecurityConfigurationIssues } from './securityRules.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const candidatePaths = [
@@ -18,8 +19,8 @@ for (const basePath of candidatePaths) {
 
 const rawEnv = {
   ...process.env,
-  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET ?? process.env.JWT_SECRET,
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ?? process.env.JWT_SECRET
+  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET,
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET
 };
 
 const envSchema = z.object({
@@ -42,6 +43,19 @@ const envSchema = z.object({
   R2_BUCKET_NAME: z.string().min(1),
   R2_ENDPOINT: z.string().url().optional()
 }).superRefine((config, context) => {
+  for (const issue of getSecurityConfigurationIssues({
+    nodeEnv: config.NODE_ENV,
+    jwtAccessSecret: config.JWT_ACCESS_SECRET,
+    jwtRefreshSecret: config.JWT_REFRESH_SECRET,
+    frontendOrigin: config.FRONTEND_ORIGIN,
+    mongodbUri: config.MONGODB_URI,
+    r2AccessKeyId: config.R2_ACCESS_KEY_ID || undefined,
+    r2SecretAccessKey: config.R2_SECRET_ACCESS_KEY || undefined,
+    r2AccountId: config.R2_ACCOUNT_ID || undefined,
+    r2Endpoint: config.R2_ENDPOINT
+  })) {
+    context.addIssue({ code: 'custom', message: issue.message, path: [issue.path] });
+  }
   if (config.ADMIN_EMAIL === config.TEACHER_EMAIL) {
     context.addIssue({ code: 'custom', message: 'ADMIN_EMAIL e TEACHER_EMAIL devem ser diferentes.', path: ['TEACHER_EMAIL'] });
   }

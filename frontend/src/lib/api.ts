@@ -41,6 +41,14 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
   return response.json() as Promise<T>;
 }
 
+export async function logoutSession(): Promise<void> {
+  try {
+    await apiRequest<void>('/auth/logout', { method: 'POST' });
+  } finally {
+    sessionStorage.clear();
+  }
+}
+
 export async function apiDownload(path: string): Promise<{ blob: Blob; filename?: string }> {
   const response = await authenticatedRequest(path);
   if (!response.ok) await throwResponseError(response);

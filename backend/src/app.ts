@@ -24,6 +24,11 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '1mb' }));
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.use('/api/v1', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
 
 const publicRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -33,6 +38,15 @@ const publicRateLimit = rateLimit({
   message: { error: 'Muitas tentativas. Tente novamente mais tarde.' }
 });
 
+const loginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas de login. Tente novamente mais tarde.' }
+});
+
+app.use('/api/v1/auth/login', loginRateLimit);
 app.use('/api/v1/auth', publicRateLimit, authRouter);
 const registrationUploadRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000,

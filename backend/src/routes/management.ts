@@ -5,8 +5,11 @@ import { z } from 'zod';
 import { requireAuth, requireRoles, requireTeacherPermission, type AuthenticatedRequest } from '../middleware/auth.js';
 import {
   Assignment, AssignmentSubmission, Attendance, AuditLog, Evaluation, LessonPlan, Material, Notification,
-  SocialComment, SocialPost, SportsClass, SportsEvent, Student, User
+  SocialComment, SocialPost, SportsClass, SportsEvent, Student, SystemSetting, User
 } from '../models/index.js';
+import { getEnrollmentSettings } from '../services/enrollmentCapacity.js';
+import { calculateAge } from '../services/dates.js';
+import { canReviewEnrollment, hasAvailableClassSlot } from '../services/enrollmentRules.js';
 import { inspectObject } from '../services/storage.js';
 
 export const managementRouter = Router();
@@ -100,7 +103,7 @@ managementRouter.get('/classes', requireRoles('admin', 'teacher', 'student'), as
       filter._id = { $in: student.classIds };
     }
     const classes = await SportsClass.find(filter).sort({ name: 1 }).populate('teacherId', 'email').lean();
-    res.json({ classes });
+    res.json({ classes: classes.map((sportsClass) => ({ ...sportsClass, capacity: sportsClass.capacity ?? 30 })) });
   } catch (error) {
     next(error);
   }
@@ -110,14 +113,14 @@ managementRouter.get('/dashboard/stats', requireRoles('admin', 'teacher', 'stude
   try {
     if (req.auth?.role === 'admin') {
       const [students, teachers, classes, attendance, submissions, posts, comments, pendingEnrollments] = await Promise.all([
-        Student.countDocuments(),
+        Student.countDocuments({ isArchived: { $ne: true } }),
         User.countDocuments({ role: 'teacher', isActive: true }),
         SportsClass.countDocuments({ isActive: true }),
         Attendance.countDocuments(),
         AssignmentSubmission.countDocuments(),
         SocialPost.countDocuments(),
         SocialComment.countDocuments(),
-        Student.countDocuments({ enrollmentStatus: 'pending' })
+        Student.countDocuments({ enrollmentStatus: 'pending', isArchived: { $ne: true } })
       ]);
       const likes = await SocialPost.aggregate([{ $project: { count: { $size: '$likedBy' } } }, { $group: { _id: null, total: { $sum: '$count' } } }]);
       res.json({
@@ -134,10 +137,10 @@ managementRouter.get('/dashboard/stats', requireRoles('admin', 'teacher', 'stude
       const studentIds = [...new Set(sportsClasses.flatMap((sportsClass) => sportsClass.studentIds.map((id) => id.toString())))];
       const assignmentIds = await Assignment.find({ classId: { $in: classIds } }).distinct('_id');
       const [students, attendance, assignments, pendingEnrollments, submissions] = await Promise.all([
-        Student.countDocuments({ _id: { $in: studentIds }, enrollmentStatus: 'approved' }),
+        Student.countDocuments({ _id: { $in: studentIds }, enrollmentStatus: 'approved', isArchived: { $ne: true } }),
         Attendance.countDocuments({ classId: { $in: classIds } }),
         Assignment.countDocuments({ classId: { $in: classIds } }),
-        Student.countDocuments({ enrollmentStatus: 'pending', modality: { $in: modalities } }),
+        Student.countDocuments({ enrollmentStatus: 'pending', modality: { $in: modalities }, isArchived: { $ne: true } }),
         AssignmentSubmission.countDocuments({ assignmentId: { $in: assignmentIds } })
       ]);
       res.json({ students, attendance, assignments, pendingEnrollments, assignmentsDelivered: submissions, classes: classIds.length });
@@ -173,6 +176,38 @@ managementRouter.get('/dashboard/stats', requireRoles('admin', 'teacher', 'stude
   }
 });
 
+managementRouter.get('/enrollment-settings', requireRoles('admin'), async (_req, res, next) => {
+  try {
+    const settings = await getEnrollmentSettings();
+    res.json({ enrollmentLimit: settings.enrollmentLimit, submittedEnrollments: settings.submittedEnrollments });
+  } catch (error) {
+    next(error);
+  }
+});
+
+managementRouter.patch('/enrollment-settings', requireRoles('admin'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const { enrollmentLimit } = z.object({ enrollmentLimit: z.number().int().min(1).max(1_000_000) }).parse(req.body);
+    await getEnrollmentSettings();
+    const settings = await SystemSetting.findOneAndUpdate(
+      { _id: 'global' },
+      { $set: { enrollmentLimit } },
+      { new: true, runValidators: true }
+    ).lean();
+    if (!settings) throw new Error('As configurações de inscrição não foram encontradas.');
+    await AuditLog.create({
+      actorId: req.auth?.userId,
+      action: 'enrollment.limit.update',
+      resource: 'SystemSetting',
+      metadata: { enrollmentLimit },
+      ip: req.ip
+    });
+    res.json({ enrollmentLimit: settings.enrollmentLimit, submittedEnrollments: settings.submittedEnrollments });
+  } catch (error) {
+    next(error);
+  }
+});
+
 managementRouter.get('/students', requireRoles('admin', 'teacher'), requireTeacherPermission('students:read'), async (req: AuthenticatedRequest, res, next) => {
   try {
     const query = z.object({
@@ -180,9 +215,11 @@ managementRouter.get('/students', requireRoles('admin', 'teacher'), requireTeach
       status: z.enum(['pending', 'approved', 'rejected']).optional(),
       modality: z.string().optional(),
       from: z.coerce.date().optional(),
-      to: z.coerce.date().optional()
+      to: z.coerce.date().optional(),
+      page: z.coerce.number().int().min(1).default(1),
+      pageSize: z.coerce.number().int().min(1).max(100).default(25)
     }).parse(req.query);
-    const filter: Record<string, unknown> = {};
+    const filter: Record<string, unknown> = { isArchived: { $ne: true } };
     if (query.name) filter.fullName = { $regex: escapeRegex(query.name), $options: 'i' };
     if (query.status) filter.enrollmentStatus = query.status;
     if (query.modality) filter.modality = query.modality;
@@ -195,8 +232,234 @@ managementRouter.get('/students', requireRoles('admin', 'teacher'), requireTeach
         { enrollmentStatus: 'pending', ...(modalities.length ? { modality: { $in: modalities } } : { _id: null }) }
       ];
     }
-    const students = await Student.find(filter).sort({ createdAt: -1 }).populate('userId', 'email').lean();
+    const total = await Student.countDocuments(filter);
+    const page = Math.min(query.page, Math.max(1, Math.ceil(total / query.pageSize)));
+    const students = await Student.find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .skip((page - 1) * query.pageSize)
+      .limit(query.pageSize)
+      .select('-termsAcceptedIp')
+      .populate('userId', 'email')
+      .lean();
+    res.json({ students, total, page, pageSize: query.pageSize });
+  } catch (error) {
+    next(error);
+  }
+});
+
+managementRouter.get('/students/archived', requireRoles('admin'), async (_req, res, next) => {
+  try {
+    const students = await Student.find({ isArchived: true })
+      .select('fullName enrollmentStatus modality classIds userId createdAt updatedAt')
+      .sort({ updatedAt: -1 })
+      .limit(200)
+      .populate('userId', 'email')
+      .lean();
     res.json({ students });
+  } catch (error) {
+    next(error);
+  }
+});
+
+managementRouter.patch('/students/:studentId', requireRoles('admin'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const studentId = z.string().regex(/^[a-f\d]{24}$/i).parse(req.params.studentId);
+    const input = z.object({
+      fullName: z.string().trim().min(3).max(150),
+      email: z.string().email().max(254).transform((value) => value.toLowerCase().trim()),
+      birthDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+        const [year, month, day] = value.split('-').map(Number);
+        const date = new Date(Date.UTC(year!, month! - 1, day!, 12));
+        return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 &&
+          date.getUTCDate() === day && date.getTime() <= Date.now();
+      }, 'Informe uma data de nascimento válida.').transform((value) => new Date(`${value}T12:00:00.000Z`)),
+      sex: z.enum(['Feminino', 'Masculino', 'Outro', 'Prefiro não informar']),
+      modality: z.string().trim().min(1).max(80),
+      school: z.string().trim().min(1).max(160),
+      address: z.object({
+        neighborhood: z.string().trim().min(1).max(120),
+        city: z.string().trim().min(1).max(120),
+        street: z.string().trim().min(1).max(180),
+        number: z.string().trim().min(1).max(20),
+        complement: z.string().trim().max(120).optional()
+      }),
+      guardian: z.object({
+        name: z.string().trim().min(3).max(150),
+        phone: z.string().regex(/^\(\d{2}\) \d{5}-\d{4}$/)
+      })
+    }).parse(req.body);
+    const student = await Student.findOne({ _id: studentId, isArchived: { $ne: true } });
+    if (!student) {
+      res.status(404).json({ error: 'Aluno não encontrado.' });
+      return;
+    }
+    const user = await User.findOne({ _id: student.userId, role: 'student', isArchived: { $ne: true } });
+    if (!user) {
+      res.status(404).json({ error: 'A conta de acesso do aluno não foi encontrada.' });
+      return;
+    }
+    if (student.enrollmentStatus === 'approved' && student.classIds.length > 0 && input.modality !== student.modality) {
+      res.status(422).json({ error: 'A modalidade não pode ser alterada enquanto o aluno estiver vinculado a turmas.' });
+      return;
+    }
+    if (await User.exists({ email: input.email, _id: { $ne: user._id } })) {
+      res.status(409).json({ error: 'Este e-mail já está cadastrado.' });
+      return;
+    }
+
+    const previousEmail = user.email;
+    const emailChanged = user.email !== input.email;
+    student.fullName = input.fullName;
+    student.birthDate = input.birthDate;
+    student.age = calculateAge(input.birthDate);
+    student.sex = input.sex;
+    student.modality = input.modality;
+    student.school = input.school;
+    student.address = input.address;
+    student.guardian = input.guardian;
+    user.email = input.email;
+    await Promise.all([user.validate(), student.validate()]);
+    try {
+      if (emailChanged) await user.save();
+      await student.save();
+    } catch (error) {
+      if (emailChanged && user.email !== previousEmail) {
+        user.email = previousEmail;
+        try {
+          await user.save();
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            'A atualização do aluno falhou e não foi possível restaurar o e-mail anterior.'
+          );
+        }
+      }
+      throw error;
+    }
+    await AuditLog.create({
+      actorId: req.auth?.userId,
+      action: 'student.update',
+      resource: 'Student',
+      resourceId: student._id,
+      metadata: { emailChanged, fields: ['fullName', 'birthDate', 'sex', 'modality', 'school', 'address', 'guardian'] },
+      ip: req.ip
+    });
+    res.json({ student });
+  } catch (error) {
+    next(error);
+  }
+});
+
+managementRouter.delete('/students/:studentId', requireRoles('admin'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const studentId = z.string().regex(/^[a-f\d]{24}$/i).parse(req.params.studentId);
+    const student = await Student.findOneAndUpdate(
+      { _id: studentId, isArchived: { $ne: true } },
+      { $set: { isArchived: true } },
+      { new: true }
+    );
+    if (!student) {
+      res.status(404).json({ error: 'Aluno não encontrado ou já arquivado.' });
+      return;
+    }
+    await Promise.all([
+      User.updateOne({ _id: student.userId }, { $set: { isActive: false }, $unset: { refreshTokenHash: 1 } }),
+      SportsClass.updateMany({ studentIds: student._id }, { $pull: { studentIds: student._id } })
+    ]);
+    await AuditLog.create({
+      actorId: req.auth?.userId,
+      action: 'student.archive',
+      resource: 'Student',
+      resourceId: student._id,
+      metadata: { enrollmentStatus: student.enrollmentStatus },
+      ip: req.ip
+    });
+    res.json({ archived: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+managementRouter.patch('/students/:studentId/restore', requireRoles('admin'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const studentId = z.string().regex(/^[a-f\d]{24}$/i).parse(req.params.studentId);
+    const { classId } = z.object({ classId: z.string().regex(/^[a-f\d]{24}$/i).optional() }).parse(req.body ?? {});
+    const student = await Student.findOne({ _id: studentId, isArchived: true });
+    if (!student) {
+      res.status(404).json({ error: 'Cadastro arquivado não encontrado.' });
+      return;
+    }
+
+    const user = await User.findOne({
+      _id: student.userId,
+      role: 'student',
+      isArchived: { $ne: true }
+    });
+    if (!user) {
+      res.status(409).json({ error: 'A conta de acesso do aluno não pode ser restaurada.' });
+      return;
+    }
+
+    const assignedClassIds: Types.ObjectId[] = [];
+    if (student.enrollmentStatus === 'approved') {
+      if (!classId) {
+        res.status(409).json({ error: 'Selecione uma turma ativa e compatível para restaurar o aluno aprovado.' });
+        return;
+      }
+      const sportsClass = await SportsClass.findOneAndUpdate(
+        {
+          _id: classId,
+          modality: student.modality,
+          isActive: true,
+          $expr: {
+            $or: [
+              { $in: [student._id, { $ifNull: ['$studentIds', []] }] },
+              {
+                $lt: [
+                  { $size: { $ifNull: ['$studentIds', []] } },
+                  { $ifNull: ['$capacity', 30] }
+                ]
+              }
+            ]
+          }
+        },
+        { $addToSet: { studentIds: student._id } },
+        { new: true }
+      );
+      if (!sportsClass) {
+        res.status(409).json({ error: 'Selecione uma turma ativa, da mesma modalidade e com vaga disponível.' });
+        return;
+      }
+      student.classIds = [sportsClass._id];
+      assignedClassIds.push(sportsClass._id);
+    }
+
+    student.isArchived = false;
+    try {
+      await student.save();
+      const restoredUser = await User.updateOne(
+        { _id: user._id, role: 'student', isArchived: { $ne: true } },
+        { $set: { isActive: true } }
+      );
+      if (restoredUser.matchedCount !== 1) {
+        throw new Error('A conta de acesso do aluno não pôde ser restaurada.');
+      }
+    } catch (error) {
+      student.isArchived = true;
+      await student.save();
+      if (assignedClassIds.length) {
+        await SportsClass.updateMany({ _id: { $in: assignedClassIds } }, { $pull: { studentIds: student._id } });
+      }
+      throw error;
+    }
+    await AuditLog.create({
+      actorId: req.auth?.userId,
+      action: 'student.restore',
+      resource: 'Student',
+      resourceId: student._id,
+      ip: req.ip
+    });
+    res.json({ restored: true });
   } catch (error) {
     next(error);
   }
@@ -210,36 +473,72 @@ managementRouter.patch('/students/:studentId/review', requireRoles('admin', 'tea
       classId: z.string().optional()
     }).refine((value) => value.status !== 'rejected' || Boolean(value.reason), {
       path: ['reason'], message: 'Informe o motivo da recusa.'
+    }).refine((value) => value.status !== 'approved' || Boolean(value.classId), {
+      path: ['classId'], message: 'Selecione uma turma para aprovar a inscrição.'
     }).parse(req.body);
-    const student = await Student.findById(req.params.studentId);
+    const student = await Student.findOne({ _id: req.params.studentId, isArchived: { $ne: true } });
     if (!student) {
       res.status(404).json({ error: 'Aluno não encontrado.' });
       return;
     }
-    if (req.auth?.role === 'teacher' || input.classId) {
+    if (!canReviewEnrollment(student.enrollmentStatus)) {
+      res.status(409).json({ error: 'Somente inscrições pendentes podem ser analisadas. Solicite que o aluno reenvie a inscrição para nova análise.' });
+      return;
+    }
+    let newlyAssignedClassId: Types.ObjectId | null = null;
+    if (req.auth?.role === 'teacher' || input.classId || input.status === 'approved') {
       if (!input.classId || !Types.ObjectId.isValid(input.classId)) {
         res.status(422).json({ error: 'Selecione uma turma para analisar a inscrição.' });
         return;
       }
       const sportsClass = await SportsClass.findOne({
         _id: input.classId,
+        isActive: true,
         ...(req.auth?.role === 'teacher' ? { teacherId: req.auth.userId } : {})
       });
       if (!sportsClass || sportsClass.modality !== student.modality) {
-        res.status(403).json({ error: 'A turma não atende à modalidade desta inscrição ou você não tem acesso.' });
+        res.status(403).json({ error: 'A turma precisa estar ativa, atender à modalidade da inscrição e estar acessível para você.' });
         return;
       }
-      if (input.status === 'approved' && !student.classIds.some((id) => id.equals(sportsClass._id))) {
-        student.classIds.push(sportsClass._id);
-        sportsClass.studentIds.push(student._id);
+      if (input.status === 'approved' && !sportsClass.studentIds.some((id) => id.equals(student._id))) {
+        if (!hasAvailableClassSlot(sportsClass.studentIds.length, sportsClass.capacity ?? 30)) {
+          res.status(409).json({ error: 'Esta turma atingiu o limite de vagas.' });
+          return;
+        }
+        const assignedClass = await SportsClass.findOneAndUpdate(
+          {
+            _id: sportsClass._id,
+            isActive: true,
+            $expr: {
+              $lt: [
+                { $size: { $ifNull: ['$studentIds', []] } },
+                { $ifNull: ['$capacity', 30] }
+              ]
+            }
+          },
+          { $addToSet: { studentIds: student._id } },
+          { new: true }
+        );
+        if (!assignedClass) {
+          res.status(409).json({ error: 'Esta turma atingiu o limite de vagas.' });
+          return;
+        }
+        newlyAssignedClassId = assignedClass._id;
+        if (!student.classIds.some((id) => id.equals(assignedClass._id))) student.classIds.push(assignedClass._id);
       }
-      if (input.status === 'approved') await sportsClass.save();
     }
     student.enrollmentStatus = input.status;
     student.rejectionReason = input.status === 'rejected' ? input.reason : undefined;
     student.reviewedBy = new Types.ObjectId(req.auth!.userId);
     student.reviewedAt = new Date();
-    await student.save();
+    try {
+      await student.save();
+    } catch (error) {
+      if (newlyAssignedClassId) {
+        await SportsClass.updateOne({ _id: newlyAssignedClassId }, { $pull: { studentIds: student._id } });
+      }
+      throw error;
+    }
     if (input.status === 'approved') {
       await User.updateOne({ _id: student.userId }, { isActive: true });
     }
@@ -262,6 +561,7 @@ managementRouter.post('/classes', requireRoles('admin', 'teacher'), async (req: 
     const input = z.object({
       name: z.string().trim().min(1).max(120),
       modality: z.string().trim().min(1).max(80).default('Futsal'),
+      capacity: z.number().int().min(1).max(1000).default(30),
       teacherId: z.string().optional(),
       location: z.string().trim().max(200).optional()
     }).parse(req.body);
@@ -270,7 +570,7 @@ managementRouter.post('/classes', requireRoles('admin', 'teacher'), async (req: 
       res.status(422).json({ error: 'Informe o professor responsável.' });
       return;
     }
-    const teacher = await User.findOne({ _id: teacherId, role: 'teacher' });
+    const teacher = await User.findOne({ _id: teacherId, role: 'teacher', isActive: true, isArchived: { $ne: true } });
     if (!teacher) {
       res.status(422).json({ error: 'O responsável deve ser um usuário professor.' });
       return;
@@ -289,6 +589,7 @@ managementRouter.patch('/classes/:classId', requireRoles('admin', 'teacher'), as
     const input = z.object({
       name: z.string().trim().min(1).max(120),
       modality: z.string().trim().min(1).max(80),
+      capacity: z.number().int().min(1).max(1000),
       location: z.string().trim().max(200).optional(),
       teacherId: z.string().regex(/^[a-f\d]{24}$/i).optional()
     }).parse(req.body);
@@ -300,23 +601,45 @@ managementRouter.patch('/classes/:classId', requireRoles('admin', 'teacher'), as
       res.status(404).json({ error: 'Turma não encontrada ou sem acesso.' });
       return;
     }
+    if (input.capacity < sportsClass.studentIds.length) {
+      res.status(422).json({ error: `A capacidade não pode ser menor que os ${sportsClass.studentIds.length} alunos vinculados.` });
+      return;
+    }
     if (input.modality !== sportsClass.modality && sportsClass.studentIds.length > 0) {
       res.status(422).json({ error: 'Não é possível alterar a modalidade de uma turma com alunos vinculados.' });
       return;
     }
     if (req.auth?.role === 'admin' && input.teacherId) {
-      const teacher = await User.findOne({ _id: input.teacherId, role: 'teacher', isActive: true }).select('_id');
+      const teacher = await User.findOne({ _id: input.teacherId, role: 'teacher', isActive: true, isArchived: { $ne: true } }).select('_id');
       if (!teacher) {
         res.status(422).json({ error: 'Selecione um professor ativo.' });
         return;
       }
       sportsClass.teacherId = teacher._id;
     }
-    const previous = { name: sportsClass.name, modality: sportsClass.modality, location: sportsClass.location, teacherId: sportsClass.teacherId.toString() };
-    sportsClass.name = input.name;
-    sportsClass.modality = input.modality;
-    sportsClass.location = input.location;
-    await sportsClass.save();
+    const previous = { name: sportsClass.name, modality: sportsClass.modality, location: sportsClass.location, capacity: sportsClass.capacity, teacherId: sportsClass.teacherId.toString() };
+    const updatedClass = await SportsClass.findOneAndUpdate(
+      {
+        _id: sportsClass._id,
+        ...(req.auth?.role === 'teacher' ? { teacherId: req.auth.userId } : {}),
+        $expr: { $lte: [{ $size: { $ifNull: ['$studentIds', []] } }, input.capacity] }
+      },
+      {
+        $set: {
+          name: input.name,
+          modality: input.modality,
+          capacity: input.capacity,
+          ...(input.location !== undefined ? { location: input.location } : {}),
+          ...(req.auth?.role === 'admin' && input.teacherId ? { teacherId: input.teacherId } : {})
+        },
+        ...(input.location === undefined ? { $unset: { location: 1 } } : {})
+      },
+      { new: true, runValidators: true }
+    );
+    if (!updatedClass) {
+      res.status(409).json({ error: 'A quantidade de alunos mudou. Atualize a tela e tente novamente.' });
+      return;
+    }
     await AuditLog.create({
       actorId: req.auth?.userId,
       action: 'class.update',
@@ -325,7 +648,7 @@ managementRouter.patch('/classes/:classId', requireRoles('admin', 'teacher'), as
       metadata: { previous, updated: input },
       ip: req.ip
     });
-    res.json({ sportsClass });
+    res.json({ sportsClass: updatedClass });
   } catch (error) {
     next(error);
   }
@@ -354,8 +677,96 @@ managementRouter.put('/teachers/:teacherId/permissions', requireRoles('admin'), 
 
 managementRouter.get('/teachers', requireRoles('admin'), async (_req, res, next) => {
   try {
-    const teachers = await User.find({ role: 'teacher' }).select('email isActive teacherPermissions createdAt').sort({ email: 1 }).lean();
+    const teachers = await User.find({ role: 'teacher' }).select('email isActive isArchived teacherPermissions createdAt').sort({ email: 1 }).lean();
     res.json({ teachers });
+  } catch (error) {
+    next(error);
+  }
+});
+
+managementRouter.patch('/teachers/:teacherId', requireRoles('admin'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const teacherId = z.string().regex(/^[a-f\d]{24}$/i).parse(req.params.teacherId);
+    const input = z.object({
+      email: z.string().email().max(254).transform((value) => value.toLowerCase().trim()),
+      password: z.string().min(12).max(128).optional()
+    }).parse(req.body);
+    const teacher = await User.findOne({ _id: teacherId, role: 'teacher', isArchived: { $ne: true } }).select('+passwordHash +refreshTokenHash');
+    if (!teacher) {
+      res.status(404).json({ error: 'Professor não encontrado.' });
+      return;
+    }
+    const emailChanged = teacher.email !== input.email;
+    const passwordChanged = Boolean(input.password);
+    teacher.email = input.email;
+    if (input.password) {
+      teacher.passwordHash = await bcrypt.hash(input.password, 12);
+      teacher.refreshTokenHash = undefined;
+    }
+    await teacher.save();
+    await AuditLog.create({
+      actorId: req.auth?.userId,
+      action: 'teacher.update',
+      resource: 'User',
+      resourceId: teacher._id,
+      metadata: { emailChanged, passwordChanged },
+      ip: req.ip
+    });
+    res.json({ teacher: { id: teacher.id, email: teacher.email } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+managementRouter.delete('/teachers/:teacherId', requireRoles('admin'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const teacherId = z.string().regex(/^[a-f\d]{24}$/i).parse(req.params.teacherId);
+    const teacher = await User.findOne({ _id: teacherId, role: 'teacher', isArchived: { $ne: true } }).select('+refreshTokenHash');
+    if (!teacher) {
+      res.status(404).json({ error: 'Professor não encontrado ou já arquivado.' });
+      return;
+    }
+    if (await SportsClass.exists({ teacherId, isActive: true })) {
+      res.status(409).json({ error: 'Reatribua as turmas ativas antes de arquivar este professor.' });
+      return;
+    }
+    teacher.isArchived = true;
+    teacher.isActive = false;
+    teacher.refreshTokenHash = undefined;
+    await teacher.save();
+    await AuditLog.create({
+      actorId: req.auth?.userId,
+      action: 'teacher.archive',
+      resource: 'User',
+      resourceId: teacher._id,
+      ip: req.ip
+    });
+    res.json({ archived: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+managementRouter.patch('/teachers/:teacherId/restore', requireRoles('admin'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const teacherId = z.string().regex(/^[a-f\d]{24}$/i).parse(req.params.teacherId);
+    const teacher = await User.findOneAndUpdate(
+      { _id: teacherId, role: 'teacher', isArchived: true },
+      { $set: { isArchived: false, isActive: true } },
+      { new: true }
+    ).select('email isActive isArchived teacherPermissions');
+    if (!teacher) {
+      res.status(404).json({ error: 'Professor arquivado não encontrado.' });
+      return;
+    }
+    await AuditLog.create({
+      actorId: req.auth?.userId,
+      action: 'teacher.restore',
+      resource: 'User',
+      resourceId: teacher._id,
+      ip: req.ip
+    });
+    res.json({ teacher });
   } catch (error) {
     next(error);
   }
@@ -390,6 +801,10 @@ managementRouter.patch('/teachers/:teacherId/status', requireRoles('admin'), asy
     const teacher = await User.findOne({ _id: teacherId, role: 'teacher' }).select('+refreshTokenHash');
     if (!teacher) {
       res.status(404).json({ error: 'Professor não encontrado.' });
+      return;
+    }
+    if (teacher.isArchived && isActive) {
+      res.status(409).json({ error: 'Um professor arquivado não pode ser reativado.' });
       return;
     }
 
@@ -436,7 +851,7 @@ managementRouter.get('/attendance', requireRoles('admin', 'teacher'), requireTea
     const start = new Date(Date.UTC(year!, month! - 1, day!));
     const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
     const [students, records] = await Promise.all([
-      Student.find({ _id: { $in: sportsClass.studentIds }, enrollmentStatus: 'approved' })
+      Student.find({ _id: { $in: sportsClass.studentIds }, enrollmentStatus: 'approved', isArchived: { $ne: true } })
         .select('fullName age')
         .sort({ fullName: 1 })
         .lean(),
@@ -1044,7 +1459,7 @@ managementRouter.get('/audit-logs', requireRoles('admin'), async (req, res, next
   try {
     const query = z.object({
       action: z.string().trim().min(1).max(120).optional(),
-      resource: z.enum(['Student', 'User', 'SportsClass']).optional(),
+      resource: z.enum(['Student', 'User', 'SportsClass', 'SystemSetting']).optional(),
       from: z.coerce.date().optional(),
       to: z.coerce.date().optional()
     }).refine((value) => !value.from || !value.to || value.from <= value.to, {

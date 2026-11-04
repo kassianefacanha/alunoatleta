@@ -31,6 +31,7 @@ interface TeacherRecord {
   _id: string;
   email: string;
   isActive: boolean;
+  isArchived: boolean;
   teacherPermissions: Permission[];
   createdAt: string;
 }
@@ -42,6 +43,7 @@ interface SportsClass {
   location?: string;
   isActive: boolean;
   studentIds: string[];
+  capacity: number;
   teacherId: { _id: string; email: string } | string;
 }
 
@@ -50,6 +52,12 @@ interface ClassDraft {
   modality: string;
   location: string;
   teacherId: string;
+  capacity: number;
+}
+
+interface EnrollmentSettings {
+  enrollmentLimit: number;
+  submittedEnrollments: number;
 }
 
 export function ClassesPage() {
@@ -63,9 +71,16 @@ export function ClassesPage() {
   const [savingTeacher, setSavingTeacher] = useState(false);
   const [savingPermissions, setSavingPermissions] = useState<string | null>(null);
   const [savingTeacherStatus, setSavingTeacherStatus] = useState<string | null>(null);
+  const [savingTeacherArchive, setSavingTeacherArchive] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [savingTeacherEdit, setSavingTeacherEdit] = useState(false);
   const [classDialogOpen, setClassDialogOpen] = useState(false);
   const [teacherDialogOpen, setTeacherDialogOpen] = useState(false);
+  const [teacherEdit, setTeacherEdit] = useState<TeacherRecord | null>(null);
+  const [teacherEditEmail, setTeacherEditEmail] = useState('');
+  const [teacherEditPassword, setTeacherEditPassword] = useState('');
+  const [teacherToArchive, setTeacherToArchive] = useState<TeacherRecord | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [className, setClassName] = useState('');
@@ -74,22 +89,30 @@ export function ClassesPage() {
   const [teacherId, setTeacherId] = useState('');
   const [teacherEmail, setTeacherEmail] = useState('');
   const [teacherPassword, setTeacherPassword] = useState('');
+  const [classCapacity, setClassCapacity] = useState(30);
+  const [enrollmentSettings, setEnrollmentSettings] = useState<EnrollmentSettings | null>(null);
+  const [enrollmentLimitDraft, setEnrollmentLimitDraft] = useState('');
   const [permissionDrafts, setPermissionDrafts] = useState<Record<string, Permission[]>>({});
   const [editingClass, setEditingClass] = useState<SportsClass | null>(null);
-  const [classDraft, setClassDraft] = useState<ClassDraft>({ name: '', modality: '', location: '', teacherId: '' });
+  const [classDraft, setClassDraft] = useState<ClassDraft>({ name: '', modality: '', location: '', teacherId: '', capacity: 30 });
   const isMobile = useMediaQuery('(max-width:599px)');
 
   async function loadData() {
     setLoading(true);
     setError('');
     try {
-      const [classResult, teacherResult] = await Promise.all([
+      const [classResult, teacherResult, settingsResult] = await Promise.all([
         apiRequest<{ classes: SportsClass[] }>('/classes'),
-        isAdmin ? apiRequest<{ teachers: TeacherRecord[] }>('/teachers') : Promise.resolve({ teachers: [] })
+        isAdmin ? apiRequest<{ teachers: TeacherRecord[] }>('/teachers') : Promise.resolve({ teachers: [] }),
+        isAdmin ? apiRequest<EnrollmentSettings>('/enrollment-settings') : Promise.resolve(null)
       ]);
       setClasses(classResult.classes);
       setTeachers(teacherResult.teachers);
       setPermissionDrafts(Object.fromEntries(teacherResult.teachers.map((teacher) => [teacher._id, teacher.teacherPermissions])));
+      if (settingsResult) {
+        setEnrollmentSettings(settingsResult);
+        setEnrollmentLimitDraft(String(settingsResult.enrollmentLimit));
+      }
       if (!teacherId && teacherResult.teachers.length) setTeacherId(teacherResult.teachers[0]._id);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível carregar turmas e professores.');
@@ -112,12 +135,14 @@ export function ClassesPage() {
         body: JSON.stringify({
           name: className.trim(),
           modality: modality.trim(),
+          capacity: classCapacity,
           location: location.trim() || undefined,
           ...(isAdmin ? { teacherId } : {})
         })
       });
       setClassName('');
       setLocation('');
+      setClassCapacity(30);
       setClassDialogOpen(false);
       setNotice('Turma criada com sucesso.');
       await loadData();
@@ -134,7 +159,8 @@ export function ClassesPage() {
       name: sportsClass.name,
       modality: sportsClass.modality,
       location: sportsClass.location ?? '',
-      teacherId: typeof sportsClass.teacherId === 'string' ? sportsClass.teacherId : sportsClass.teacherId._id
+      teacherId: typeof sportsClass.teacherId === 'string' ? sportsClass.teacherId : sportsClass.teacherId._id,
+      capacity: sportsClass.capacity
     });
   }
 
@@ -150,6 +176,7 @@ export function ClassesPage() {
         body: JSON.stringify({
           name: classDraft.name.trim(),
           modality: classDraft.modality.trim(),
+          capacity: classDraft.capacity,
           location: classDraft.location.trim() || undefined,
           ...(isAdmin ? { teacherId: classDraft.teacherId } : {})
         })
@@ -221,6 +248,80 @@ export function ClassesPage() {
     }
   }
 
+  async function saveEnrollmentLimit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const enrollmentLimit = Number(enrollmentLimitDraft);
+    if (!Number.isInteger(enrollmentLimit) || enrollmentLimit < 1) {
+      setError('Informe um limite de inscrições maior que zero.');
+      return;
+    }
+    setSavingSettings(true);
+    setError('');
+    try {
+      const updated = await apiRequest<EnrollmentSettings>('/enrollment-settings', {
+        method: 'PATCH',
+        body: JSON.stringify({ enrollmentLimit })
+      });
+      setEnrollmentSettings(updated);
+      setNotice('Limite geral de inscrições atualizado.');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o limite de inscrições.');
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  async function saveTeacherEdit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!teacherEdit) return;
+    setSavingTeacherEdit(true);
+    setError('');
+    try {
+      await apiRequest(`/teachers/${teacherEdit._id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          email: teacherEditEmail.trim(),
+          ...(teacherEditPassword ? { password: teacherEditPassword } : {})
+        })
+      });
+      setNotice(`Cadastro de ${teacherEditEmail.trim()} atualizado.`);
+      setTeacherEdit(null);
+      setTeacherEditPassword('');
+      await loadData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o professor.');
+    } finally {
+      setSavingTeacherEdit(false);
+    }
+  }
+
+  async function archiveTeacher() {
+    if (!teacherToArchive) return;
+    setSavingTeacherArchive(teacherToArchive._id);
+    setError('');
+    try {
+      await apiRequest(`/teachers/${teacherToArchive._id}`, { method: 'DELETE' });
+      setNotice(`Professor ${teacherToArchive.email} arquivado.`);
+      setTeacherToArchive(null);
+      await loadData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível arquivar o professor.');
+    } finally {
+      setSavingTeacherArchive(null);
+    }
+  }
+
+  async function restoreTeacher(teacher: TeacherRecord) {
+    setError('');
+    try {
+      await apiRequest(`/teachers/${teacher._id}/restore`, { method: 'PATCH' });
+      setNotice(`Professor ${teacher.email} restaurado.`);
+      await loadData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível restaurar o professor.');
+    }
+  }
+
   function togglePermission(teacherIdValue: string, permission: Permission, checked: boolean) {
     setPermissionDrafts((current) => {
       const currentPermissions = current[teacherIdValue] ?? [];
@@ -249,7 +350,7 @@ export function ClassesPage() {
       valueGetter: (_value, row) => typeof row.teacherId === 'string' ? 'Professor' : row.teacherId.email
     },
     { field: 'location', headerName: 'Local', minWidth: 120, valueGetter: (_value, row) => row.location || '—' },
-    { field: 'studentCount', headerName: 'Alunos', minWidth: 90, valueGetter: (_value, row) => row.studentIds.length },
+    { field: 'studentCount', headerName: 'Vagas', minWidth: 105, valueGetter: (_value, row) => `${row.studentIds.length}/${row.capacity}` },
     {
       field: 'status',
       headerName: 'Status',
@@ -271,7 +372,6 @@ export function ClassesPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>GESTÃO</Typography>
-          <Typography variant="h4" fontWeight={800}>Turmas e professores</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
             {isAdmin ? 'Cadastre professores e organize as turmas esportivas.' : 'Crie e consulte as turmas sob sua responsabilidade.'}
           </Typography>
@@ -285,6 +385,32 @@ export function ClassesPage() {
           {isAdmin && <Button variant="outlined" onClick={() => setTeacherDialogOpen(true)}>Cadastrar professor</Button>}
         </Stack>
 
+        {isAdmin && enrollmentSettings && (
+          <Paper component="form" onSubmit={(event) => void saveEnrollmentLimit(event)} variant="outlined" sx={{ p: { xs: 2, sm: 2.5 } }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography fontWeight={750}>Limite geral de inscrições</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {enrollmentSettings.submittedEnrollments} de {enrollmentSettings.enrollmentLimit} inscrições já submetidas.
+                </Typography>
+              </Box>
+              <TextField
+                label="Limite"
+                type="number"
+                size="small"
+                value={enrollmentLimitDraft}
+                onChange={(event) => setEnrollmentLimitDraft(event.target.value)}
+                inputProps={{ min: 1, max: 1000000, step: 1 }}
+                sx={{ width: { xs: '100%', sm: 150 } }}
+                required
+              />
+              <Button type="submit" variant="outlined" disabled={savingSettings}>
+                {savingSettings ? 'Salvando...' : 'Atualizar limite'}
+              </Button>
+            </Stack>
+          </Paper>
+        )}
+
         <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
           <DataGrid
             rows={classes}
@@ -293,7 +419,7 @@ export function ClassesPage() {
             loading={loading}
             localeText={ptBR.components.MuiDataGrid.defaultProps.localeText}
             disableRowSelectionOnClick
-            columnVisibilityModel={isMobile ? { modality: false, teacher: false, location: false, studentCount: false } : undefined}
+            columnVisibilityModel={isMobile ? { modality: false, teacher: false, location: false } : undefined}
             pageSizeOptions={[10, 25, 50]}
             initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
             autoHeight
@@ -315,10 +441,21 @@ export function ClassesPage() {
                   <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />}>
                     <Box>
                       <Typography fontWeight={700}>{teacher.email}</Typography>
-                      <Typography variant="body2" color="text.secondary">{teacher.isActive ? 'Ativo' : 'Inativo'} · {teacher.teacherPermissions.length} permissões</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {teacher.isArchived ? 'Arquivado' : teacher.isActive ? 'Ativo' : 'Inativo'} · {teacher.teacherPermissions.length} permissões
+                      </Typography>
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails>
+                    {teacher.isArchived && (
+                      <Alert
+                        severity="info"
+                        action={<Button color="inherit" size="small" onClick={() => void restoreTeacher(teacher)}>Restaurar</Button>}
+                        sx={{ mb: 2 }}
+                      >
+                        O cadastro está arquivado e não pode acessar o sistema.
+                      </Alert>
+                    )}
                     <Grid container spacing={1}>
                       {availablePermissions.map(({ value, label }) => (
                         <Grid item xs={12} sm={6} key={value}>
@@ -337,21 +474,34 @@ export function ClassesPage() {
                     <Button
                       variant="contained"
                       sx={{ mt: 2 }}
-                      disabled={!changed || savingPermissions === teacher._id}
+                      disabled={teacher.isArchived || !changed || savingPermissions === teacher._id}
                       onClick={() => void savePermissions(teacher)}
                     >
                       {savingPermissions === teacher._id ? 'Salvando...' : 'Salvar permissões'}
                     </Button>
-                    <Button
-                      color={teacher.isActive ? 'warning' : 'success'}
-                      sx={{ mt: 2, ml: 1 }}
-                      disabled={savingTeacherStatus === teacher._id}
-                      onClick={() => void toggleTeacherStatus(teacher)}
-                    >
-                      {savingTeacherStatus === teacher._id
-                        ? 'Atualizando...'
-                        : teacher.isActive ? 'Desativar professor' : 'Ativar professor'}
-                    </Button>
+                    {!teacher.isArchived && (
+                      <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
+                        <Button
+                          color={teacher.isActive ? 'warning' : 'success'}
+                          disabled={savingTeacherStatus === teacher._id}
+                          onClick={() => void toggleTeacherStatus(teacher)}
+                        >
+                          {savingTeacherStatus === teacher._id ? 'Atualizando...' : teacher.isActive ? 'Desativar professor' : 'Ativar professor'}
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          disabled={!teacher.isActive}
+                          onClick={() => {
+                            setTeacherEdit(teacher);
+                            setTeacherEditEmail(teacher.email);
+                            setTeacherEditPassword('');
+                          }}
+                        >
+                          Editar professor
+                        </Button>
+                        <Button color="warning" onClick={() => { setError(''); setTeacherToArchive(teacher); }}>Arquivar professor</Button>
+                      </Stack>
+                    )}
                   </AccordionDetails>
                 </Accordion>
               );
@@ -365,6 +515,7 @@ export function ClassesPage() {
             <DialogContent sx={{ display: 'grid', gap: 2, pt: '12px !important' }}>
               <TextField label="Nome da turma" value={className} onChange={(event) => setClassName(event.target.value)} inputProps={{ maxLength: 120 }} required />
               <TextField label="Modalidade" value={modality} onChange={(event) => setModality(event.target.value)} inputProps={{ maxLength: 80 }} required />
+              <TextField label="Vagas da turma" type="number" value={classCapacity} onChange={(event) => setClassCapacity(Number(event.target.value))} inputProps={{ min: 1, max: 1000, step: 1 }} required />
               <TextField label="Local (opcional)" value={location} onChange={(event) => setLocation(event.target.value)} inputProps={{ maxLength: 200 }} />
               {isAdmin && (
                 <TextField
@@ -431,6 +582,15 @@ export function ClassesPage() {
                 onChange={(event) => setClassDraft({ ...classDraft, location: event.target.value })}
                 inputProps={{ maxLength: 200 }}
               />
+              <TextField
+                label="Vagas da turma"
+                type="number"
+                value={classDraft.capacity}
+                onChange={(event) => setClassDraft({ ...classDraft, capacity: Number(event.target.value) })}
+                inputProps={{ min: editingClass?.studentIds.length ?? 1, max: 1000, step: 1 }}
+                helperText={`Alunos vinculados: ${editingClass?.studentIds.length ?? 0}`}
+                required
+              />
               {isAdmin && (
                 <TextField
                   label="Professor responsável"
@@ -452,6 +612,43 @@ export function ClassesPage() {
               </Button>
             </DialogActions>
           </Box>
+        </Dialog>
+        <Dialog open={Boolean(teacherEdit)} onClose={() => !savingTeacherEdit && setTeacherEdit(null)} fullWidth maxWidth="sm">
+          <Box component="form" onSubmit={(event) => void saveTeacherEdit(event)}>
+            <DialogTitle>Editar cadastro do professor</DialogTitle>
+            <DialogContent sx={{ display: 'grid', gap: 2, pt: '12px !important' }}>
+              {error && <Alert severity="error">{error}</Alert>}
+              <TextField label="E-mail" type="email" autoComplete="email" value={teacherEditEmail} onChange={(event) => setTeacherEditEmail(event.target.value)} required />
+              <TextField
+                label="Nova senha (opcional)"
+                type="password"
+                autoComplete="new-password"
+                value={teacherEditPassword}
+                onChange={(event) => setTeacherEditPassword(event.target.value)}
+                inputProps={{ minLength: 12, maxLength: 128 }}
+                helperText="Deixe em branco para manter a senha atual. Se alterada, o professor precisará entrar novamente."
+              />
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <Button onClick={() => setTeacherEdit(null)} disabled={savingTeacherEdit}>Cancelar</Button>
+              <Button type="submit" variant="contained" disabled={savingTeacherEdit}>{savingTeacherEdit ? 'Salvando...' : 'Salvar alterações'}</Button>
+            </DialogActions>
+          </Box>
+        </Dialog>
+        <Dialog open={Boolean(teacherToArchive)} onClose={() => !savingTeacherArchive && setTeacherToArchive(null)} fullWidth maxWidth="xs">
+          <DialogTitle>Arquivar professor?</DialogTitle>
+          <DialogContent>
+            {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+            <Typography>
+              {teacherToArchive?.email} perderá o acesso ao sistema. O histórico e os registros serão preservados. Turmas ativas precisam ser reatribuídas antes.
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button onClick={() => setTeacherToArchive(null)} disabled={Boolean(savingTeacherArchive)}>Cancelar</Button>
+            <Button color="warning" variant="contained" onClick={() => void archiveTeacher()} disabled={Boolean(savingTeacherArchive)}>
+              {savingTeacherArchive ? 'Arquivando...' : 'Arquivar professor'}
+            </Button>
+          </DialogActions>
         </Dialog>
       </Stack>
     </DashboardLayout>

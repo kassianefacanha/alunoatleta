@@ -10,13 +10,28 @@ import { ptBR } from '@mui/x-data-grid/locales';
 import { DashboardLayout } from '../components/templates/DashboardLayout';
 import { apiRequest } from '../lib/api';
 
-type AuditAction = 'student.enrollment.approved' | 'student.enrollment.rejected' | 'teacher.permissions.update' | 'teacher.create' | 'teacher.activate' | 'teacher.deactivate' | 'class.create' | 'class.update';
+type AuditAction =
+  | 'student.enrollment.approved'
+  | 'student.enrollment.rejected'
+  | 'student.update'
+  | 'student.archive'
+  | 'student.restore'
+  | 'teacher.permissions.update'
+  | 'teacher.create'
+  | 'teacher.update'
+  | 'teacher.archive'
+  | 'teacher.restore'
+  | 'teacher.activate'
+  | 'teacher.deactivate'
+  | 'class.create'
+  | 'class.update'
+  | 'enrollment.limit.update';
 
 interface AuditLogRecord {
   _id: string;
   actorId?: { email: string } | string;
   action: AuditAction;
-  resource: 'Student' | 'User' | 'SportsClass';
+  resource: 'Student' | 'User' | 'SportsClass' | 'SystemSetting';
   resourceId?: string;
   metadata?: Record<string, unknown>;
   ip?: string;
@@ -34,12 +49,19 @@ const emptyFilters: AuditFilters = { action: '', resource: '', from: '', to: '' 
 const actionLabels: Record<AuditAction, string> = {
   'student.enrollment.approved': 'Inscrição aprovada',
   'student.enrollment.rejected': 'Inscrição recusada',
+  'student.update': 'Cadastro de aluno alterado',
+  'student.archive': 'Aluno arquivado',
+  'student.restore': 'Aluno restaurado',
   'teacher.permissions.update': 'Permissões de professor alteradas',
   'teacher.create': 'Professor cadastrado',
+  'teacher.update': 'Cadastro de professor alterado',
+  'teacher.archive': 'Professor arquivado',
+  'teacher.restore': 'Professor restaurado',
   'teacher.activate': 'Professor ativado',
   'teacher.deactivate': 'Professor desativado',
   'class.create': 'Turma cadastrada',
-  'class.update': 'Turma alterada'
+  'class.update': 'Turma alterada',
+  'enrollment.limit.update': 'Limite de inscrições alterado'
 };
 
 function formatDate(value: string) {
@@ -108,7 +130,8 @@ export function AuditLogsPage() {
       valueGetter: (_value, row) => ({
         Student: 'Aluno',
         User: 'Usuário',
-        SportsClass: 'Turma'
+        SportsClass: 'Turma',
+        SystemSetting: 'Configuração'
       }[row.resource] ?? row.resource)
     },
     { field: 'ip', headerName: 'IP', minWidth: 130, valueGetter: (_value, row) => row.ip ?? '—' },
@@ -128,7 +151,6 @@ export function AuditLogsPage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>ADMINISTRAÇÃO</Typography>
-          <Typography variant="h4" fontWeight={800}>Logs de auditoria</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>Ações administrativas recentes, até 200 registros por consulta.</Typography>
         </Box>
 
@@ -194,6 +216,7 @@ export function AuditLogsPage() {
                 <MenuItem value="Student">Aluno</MenuItem>
                 <MenuItem value="User">Usuário</MenuItem>
                 <MenuItem value="SportsClass">Turma</MenuItem>
+                <MenuItem value="SystemSetting">Configuração</MenuItem>
               </Select>
             </FormControl>
             <TextField

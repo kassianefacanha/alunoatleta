@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
+import { hasPermission, type TeacherPermission } from './lib/permissions';
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(({ DashboardPage }) => ({ default: DashboardPage })));
 const HomePage = lazy(() => import('./pages/HomePage').then(({ HomePage }) => ({ default: HomePage })));
@@ -20,10 +21,11 @@ const StudentProfilePage = lazy(() => import('./pages/StudentProfilePage').then(
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage').then(({ AuditLogsPage }) => ({ default: AuditLogsPage })));
 const ExportsPage = lazy(() => import('./pages/ExportsPage').then(({ ExportsPage }) => ({ default: ExportsPage })));
 
-function Protected({ children, roles }: { children: React.ReactNode; roles?: string[] }) {
+function Protected({ children, roles, permission }: { children: React.ReactNode; roles?: string[]; permission?: TeacherPermission }) {
   if (!sessionStorage.getItem('accessToken')) return <Navigate to="/login" replace />;
   const user = JSON.parse(sessionStorage.getItem('user') ?? '{}') as { role?: string };
   if (roles && !roles.includes(user.role ?? '')) return <Navigate to="/app" replace />;
+  if (permission && !hasPermission(permission)) return <Navigate to="/app" replace />;
   return children;
 }
 
@@ -39,16 +41,16 @@ export function App() {
         <Route path="/termos-de-inscricao" element={<LegalPage document="termos-de-inscricao" />} />
         <Route path="/politica-de-privacidade" element={<LegalPage document="politica-de-privacidade" />} />
         <Route path="/app" element={<Protected><DashboardPage /></Protected>} />
-        <Route path="/alunos" element={<Protected roles={['admin', 'teacher']}><StudentsPage /></Protected>} />
+        <Route path="/alunos" element={<Protected roles={['admin', 'teacher']} permission="students:read"><StudentsPage /></Protected>} />
         <Route path="/turmas" element={<Protected roles={['admin', 'teacher']}><ClassesPage /></Protected>} />
-        <Route path="/chamadas" element={<Protected roles={['admin', 'teacher']}><AttendancePage /></Protected>} />
-        <Route path="/tarefas" element={<Protected><AssignmentsPage /></Protected>} />
+        <Route path="/chamadas" element={<Protected roles={['admin', 'teacher']} permission="attendance:write"><AttendancePage /></Protected>} />
+        <Route path="/tarefas" element={<Protected permission="assignments:read"><AssignmentsPage /></Protected>} />
         <Route path="/materiais-avisos" element={<Protected><MaterialsNotificationsPage /></Protected>} />
         <Route path="/eventos-avaliacoes" element={<Protected><EventsEvaluationsPage /></Protected>} />
-        <Route path="/rede-social" element={<Protected><SocialPage /></Protected>} />
+        <Route path="/rede-social" element={<Protected permission="social:read"><SocialPage /></Protected>} />
         <Route path="/meu-perfil" element={<Protected roles={['student']}><StudentProfilePage /></Protected>} />
         <Route path="/auditoria" element={<Protected roles={['admin']}><AuditLogsPage /></Protected>} />
-        <Route path="/exportacoes" element={<Protected roles={['admin', 'teacher']}><ExportsPage /></Protected>} />
+        <Route path="/exportacoes" element={<Protected roles={['admin', 'teacher']} permission="exports:read"><ExportsPage /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

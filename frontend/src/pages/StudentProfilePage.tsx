@@ -124,7 +124,6 @@ export function StudentProfilePage() {
       <Stack spacing={2.5}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>ÁREA DO ALUNO</Typography>
-          <Typography variant="h4" fontWeight={800}>Meu perfil e desenvolvimento</Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>Atualize seus dados pessoais e acompanhe sua jornada esportiva.</Typography>
         </Box>
 

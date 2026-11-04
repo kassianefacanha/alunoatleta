@@ -10,6 +10,7 @@ const userSchema = new Schema({
   passwordHash: { type: String, required: true, select: false },
   role: { type: String, enum: ['admin', 'teacher', 'student'], required: true },
   isActive: { type: Boolean, default: true },
+  isArchived: { type: Boolean, default: false },
   refreshTokenHash: { type: String, select: false },
   teacherPermissions: {
     type: [String],
@@ -39,6 +40,7 @@ const studentSchema = new Schema({
   studentPhotoKey: { type: String, required: true },
   signedFormPdfKey: { type: String, required: true },
   enrollmentStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending', index: true },
+  isArchived: { type: Boolean, default: false, index: true },
   rejectionReason: { type: String },
   reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   reviewedAt: { type: Date },
@@ -54,6 +56,7 @@ const sportsClassSchema = new Schema({
   modality: { type: String, required: true, default: 'Futsal' },
   teacherId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   studentIds: [{ type: Schema.Types.ObjectId, ref: 'Student' }],
+  capacity: { type: Number, required: true, min: 1, default: 30 },
   schedule: [{ dayOfWeek: { type: Number, min: 0, max: 6 }, startTime: String, endTime: String }],
   location: { type: String, trim: true },
   isActive: { type: Boolean, default: true }
@@ -156,6 +159,12 @@ const auditLogSchema = new Schema({
 }, { ...timestamps, versionKey: false });
 auditLogSchema.index({ createdAt: -1 });
 
+const systemSettingSchema = new Schema({
+  _id: { type: String, default: 'global' },
+  enrollmentLimit: { type: Number, required: true, min: 1, default: 100 },
+  submittedEnrollments: { type: Number, required: true, min: 0, default: 0 }
+}, { timestamps: true, versionKey: false });
+
 export const User = model('User', userSchema);
 export const Student = model('Student', studentSchema);
 export const SportsClass = model('SportsClass', sportsClassSchema);
@@ -170,6 +179,7 @@ export const Evaluation = model('Evaluation', evaluationSchema);
 export const SocialPost = model('SocialPost', socialPostSchema);
 export const SocialComment = model('SocialComment', socialCommentSchema);
 export const AuditLog = model('AuditLog', auditLogSchema);
+export const SystemSetting = model('SystemSetting', systemSettingSchema);
 
 export function isObjectId(value: string): boolean {
   return Types.ObjectId.isValid(value);

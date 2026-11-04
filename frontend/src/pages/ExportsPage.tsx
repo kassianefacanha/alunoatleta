@@ -159,7 +159,6 @@ export function ExportsPage() {
       <Stack spacing={3}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>RELATÓRIOS</Typography>
-          <Typography variant="h4" fontWeight={800}>Exportar dados</Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
             Escolha uma tabela, aplique filtros e selecione as colunas para gerar CSV, Excel ou PDF.
           </Typography>

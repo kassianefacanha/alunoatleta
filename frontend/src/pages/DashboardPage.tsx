@@ -5,10 +5,13 @@ import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import { DashboardLayout } from '../components/templates/DashboardLayout';
 import { StatCard } from '../components/molecules/StatCard';
 import { apiRequest } from '../lib/api';
+import { hasPermission, type TeacherPermission } from '../lib/permissions';
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const user = JSON.parse(sessionStorage.getItem('user') ?? '{"email":"Aluno","role":"student"}') as { email: string; role: string };
+  const canReviewEnrollments = user.role === 'admin' ||
+    (user.role === 'teacher' && hasPermission('students:write'));
   const [stats, setStats] = useState<Record<string, number>>({});
   const [statsError, setStatsError] = useState('');
   const [statsLoading, setStatsLoading] = useState(true);
@@ -31,7 +34,7 @@ export function DashboardPage() {
     : user.role === 'teacher'
       ? [['Alunos', stats.students ?? '—', 'Aprovados nas suas turmas'], ['Presenças', stats.attendance ?? '—', 'Registros nas suas turmas'], ['Tarefas', stats.assignments ?? '—', 'Publicadas nas suas turmas'], ['Entregas', stats.assignmentsDelivered ?? '—', 'Respostas recebidas'], ['Inscrições', stats.pendingEnrollments ?? '—', 'Aguardando análise'], ['Turmas', stats.classes ?? '—', 'Sob sua responsabilidade']]
       : [['Presenças', stats.attendance ?? '—', `${stats.attendanceRate ?? '—'}% de frequência`], ['Avaliações', stats.evaluations ?? '—', 'Seu desenvolvimento'], ['Tarefas', stats.assignmentsToDo ?? '—', 'Pendentes para entregar'], ['Notificações', stats.unreadNotifications ?? '—', 'Não lidas']];
-  const shortcuts: Array<{ title: string; description: string; path: string; action: string }> = user.role === 'admin'
+  const shortcuts: Array<{ title: string; description: string; path: string; action: string; permission?: TeacherPermission }> = user.role === 'admin'
     ? [
       { title: 'Alunos e inscrições', description: 'Consulte cadastros e analise inscrições pendentes.', path: '/alunos', action: 'Gerenciar alunos' },
       { title: 'Turmas e professores', description: 'Organize modalidades, turmas e permissões.', path: '/turmas', action: 'Gerenciar turmas' },
@@ -40,9 +43,9 @@ export function DashboardPage() {
     ]
     : user.role === 'teacher'
       ? [
-        { title: 'Alunos e inscrições', description: 'Acompanhe seus alunos e analise inscrições.', path: '/alunos', action: 'Ver alunos' },
-        { title: 'Chamada', description: 'Registre a presença da turma por data.', path: '/chamadas', action: 'Fazer chamada' },
-        { title: 'Tarefas', description: 'Publique atividades e acompanhe entregas.', path: '/tarefas', action: 'Gerenciar tarefas' },
+        { title: 'Alunos e inscrições', description: 'Acompanhe seus alunos e analise inscrições.', path: '/alunos', action: 'Ver alunos', permission: 'students:read' },
+        { title: 'Chamada', description: 'Registre a presença da turma por data.', path: '/chamadas', action: 'Fazer chamada', permission: 'attendance:write' },
+        { title: 'Tarefas', description: 'Publique atividades e acompanhe entregas.', path: '/tarefas', action: 'Gerenciar tarefas', permission: 'assignments:read' },
         { title: 'Materiais e avisos', description: 'Compartilhe conteúdos e comunicados.', path: '/materiais-avisos', action: 'Abrir conteúdos' }
       ]
       : [
@@ -50,12 +53,12 @@ export function DashboardPage() {
         { title: 'Meu desenvolvimento', description: 'Acompanhe presença, avaliações e feedback.', path: '/meu-perfil', action: 'Ver meu perfil' },
         { title: 'Rede social', description: 'Veja novidades e interaja com sua turma.', path: '/rede-social', action: 'Acessar rede social' }
       ];
+  const visibleShortcuts = shortcuts.filter((shortcut) => !shortcut.permission || hasPermission(shortcut.permission));
   return (
-    <DashboardLayout name={user.email} onLogout={() => { sessionStorage.clear(); navigate('/login'); }}>
+    <DashboardLayout name={user.email} onLogout={() => { sessionStorage.clear(); navigate('/login'); }} pageTitle={heading}>
       <Box sx={{ mb: 3 }}>
         <Box>
           <Typography variant="overline" color="primary" fontWeight={800}>PAINEL {user.role.toUpperCase()}</Typography>
-          <Typography variant="h4" fontWeight={800}>{heading}</Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
             {user.role === 'student'
               ? 'Acompanhe suas atividades e encontre o próximo passo da sua jornada.'
@@ -63,7 +66,7 @@ export function DashboardPage() {
           </Typography>
         </Box>
       </Box>
-      {(user.role === 'admin' || user.role === 'teacher') && Number(stats.pendingEnrollments) > 0 && (
+      {canReviewEnrollments && Number(stats.pendingEnrollments) > 0 && (
         <Paper variant="outlined" sx={{ mb: 3, p: { xs: 2, sm: 2.5 }, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', borderColor: 'warning.light', bgcolor: 'warning.50' }}>
           <Box>
             <Typography fontWeight={750}>
@@ -81,7 +84,7 @@ export function DashboardPage() {
       <Box sx={{ mt: 4 }}>
         <Typography variant="h6" fontWeight={750} sx={{ mb: 2 }}>Acesso rápido</Typography>
         <Grid container spacing={2}>
-          {shortcuts.map((shortcut) => (
+          {visibleShortcuts.map((shortcut) => (
             <Grid key={shortcut.path} item xs={12} sm={6} md={user.role === 'student' ? 4 : 3}>
               <Paper variant="outlined" sx={{ p: 2.5, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                 <Typography variant="subtitle1" fontWeight={750}>{shortcut.title}</Typography>

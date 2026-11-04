@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { env } from '../config/env.js';
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js';
 import { Student, User } from '../models/index.js';
+import { calculateAge } from '../services/dates.js';
+import { releaseEnrollmentSlot, reserveEnrollmentSlot } from '../services/enrollmentCapacity.js';
 import { inspectObject } from '../services/storage.js';
 
 export const authRouter = Router();
@@ -48,12 +50,6 @@ const resubmitSchema = registerSchema.omit({
   termsAccepted: z.literal(true)
 });
 
-function calculateAge(birthDate: Date, now = new Date()): number {
-  let age = now.getFullYear() - birthDate.getFullYear();
-  if (now.getMonth() < birthDate.getMonth() || (now.getMonth() === birthDate.getMonth() && now.getDate() < birthDate.getDate())) age -= 1;
-  return age;
-}
-
 function issueTokens(userId: string, role: string) {
   const accessToken = jwt.sign({ role }, env.JWT_ACCESS_SECRET, { subject: userId, expiresIn: '15m' });
   const refreshToken = jwt.sign({ role, tokenType: 'refresh' }, env.JWT_REFRESH_SECRET, { subject: userId, expiresIn: '7d' });
@@ -94,8 +90,16 @@ authRouter.post('/register', async (req, res, next) => {
       return;
     }
 
-    const user = await User.create({ email: input.email, passwordHash: await bcrypt.hash(input.password, 12), role: 'student' });
+    const reservation = await reserveEnrollmentSlot();
+    if (!reservation) {
+      res.status(409).json({ error: 'O limite de inscrições foi atingido. Entre em contato com a equipe do projeto.' });
+      return;
+    }
+
+    let createdUserId: string | null = null;
     try {
+      const user = await User.create({ email: input.email, passwordHash: await bcrypt.hash(input.password, 12), role: 'student' });
+      createdUserId = user.id;
       const student = await Student.create({
         userId: user._id,
         fullName: input.fullName,
@@ -117,7 +121,8 @@ authRouter.post('/register', async (req, res, next) => {
         student: { id: student.id, enrollmentStatus: student.enrollmentStatus }
       });
     } catch (error) {
-      await User.deleteOne({ _id: user._id });
+      if (createdUserId) await User.deleteOne({ _id: createdUserId });
+      await releaseEnrollmentSlot();
       throw error;
     }
   } catch (error) {
@@ -129,7 +134,7 @@ authRouter.post('/login', async (req, res, next) => {
   try {
     const input = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
     const user = await User.findOne({ email: input.email.toLowerCase().trim() }).select('+passwordHash');
-    if (!user || !user.isActive || !(await bcrypt.compare(input.password, user.passwordHash))) {
+    if (!user || !user.isActive || user.isArchived || !(await bcrypt.compare(input.password, user.passwordHash))) {
       res.status(401).json({ error: 'E-mail ou senha inválidos.' });
       return;
     }
@@ -162,7 +167,11 @@ authRouter.post('/refresh', async (req, res, next) => {
       return;
     }
     const user = await User.findById(claims.sub).select('+refreshTokenHash');
-    if (!user?.refreshTokenHash || !(await bcrypt.compare(token, user.refreshTokenHash))) {
+    const studentProfile = user?.role === 'student'
+      ? await Student.exists({ userId: user._id, isArchived: { $ne: true } })
+      : true;
+    if (!user || user.role !== claims.role || !user.isActive || user.isArchived || !studentProfile ||
+      !user.refreshTokenHash || !(await bcrypt.compare(token, user.refreshTokenHash))) {
       res.status(401).json({ error: 'Refresh token revogado.' });
       return;
     }
