@@ -17,6 +17,15 @@ function isDuplicateKeyError(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
 }
 
+function reportAccountConflict(account: DemoAccount, emailVariable: string, reason: string) {
+  const message = `${emailVariable} ${reason}`;
+  if (account.isTestData) {
+    console.warn(`${message} A conta de demonstração foi ignorada; configure um e-mail exclusivo para criá-la.`);
+    return;
+  }
+  throw new Error(message);
+}
+
 async function migrateLegacyAdmin(email: string): Promise<void> {
   const normalizedEmail = email.trim().toLowerCase();
   const legacyAdmin = await User.collection.findOne({
@@ -48,10 +57,19 @@ async function migrateLegacyAdmin(email: string): Promise<void> {
 
 async function ensureAccount(account: DemoAccount, emailVariable: string, passwordVariable: string) {
   const email = account.email.trim().toLowerCase();
-  const existing = await User.findOne({ email }).select("role deletedAt");
+  const existing = await User.findOne({ email }).select("role deletedAt isTestData");
   if (existing) {
-    if (existing.deletedAt || existing.role !== account.role) {
-      throw new Error(`${emailVariable} já está associado a uma conta incompatível ou desativada.`);
+    if (
+      existing.deletedAt ||
+      existing.role !== account.role ||
+      existing.isTestData !== account.isTestData
+    ) {
+      reportAccountConflict(
+        account,
+        emailVariable,
+        "já está associado a uma conta incompatível, desativada ou não marcada como demonstração.",
+      );
+      return false;
     }
     return false;
   }
@@ -76,9 +94,19 @@ async function ensureAccount(account: DemoAccount, emailVariable: string, passwo
     return true;
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
-    const conflictingAccount = await User.findOne({ email }).select("role deletedAt");
-    if (!conflictingAccount || conflictingAccount.deletedAt || conflictingAccount.role !== account.role) {
-      throw new Error(`${emailVariable} foi cadastrado por outra conta ou já está em uso por um perfil incompatível.`);
+    const conflictingAccount = await User.findOne({ email }).select("role deletedAt isTestData");
+    if (
+      !conflictingAccount ||
+      conflictingAccount.deletedAt ||
+      conflictingAccount.role !== account.role ||
+      conflictingAccount.isTestData !== account.isTestData
+    ) {
+      reportAccountConflict(
+        account,
+        emailVariable,
+        "foi cadastrado por outra conta ou já está em uso por um perfil incompatível.",
+      );
+      return false;
     }
     return false;
   }
