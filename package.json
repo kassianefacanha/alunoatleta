@@ -19,6 +19,7 @@
     "server": "npm run server --workspace @aluno-atleta/backend",
     "server:build": "npm run server:build --workspace @aluno-atleta/backend",
     "server:start": "npm run server:start --workspace @aluno-atleta/backend",
+    "admin:reset-password": "npm run admin:reset-password --workspace @aluno-atleta/backend",
     "seed": "npm run seed --workspace @aluno-atleta/backend",
     "seed:clear": "npm run seed:clear --workspace @aluno-atleta/backend",
     "assets:brand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-brand-assets.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/extract-project-banner.ps1",
