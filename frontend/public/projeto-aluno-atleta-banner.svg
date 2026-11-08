@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420" viewBox="0 0 640 420">
+  <defs>
+    <linearGradient id="navy" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#11346f"/>
+      <stop offset="1" stop-color="#183976"/>
+    </linearGradient>
+    <clipPath id="top">
+      <path d="M22 40V18c0-9 7-16 16-16h118c-7 12-17 19-33 22-24 3-37 18-42 38-5 18-17 31-37 38V40z"/>
+    </clipPath>
+    <clipPath id="bottom">
+      <path d="M618 380v22c0 9-7 16-16 16H484c7-12 17-19 33-22 24-3 37-18 42-38 5-18 17-31 37-38z"/>
+    </clipPath>
+  </defs>
+  <rect x="1" y="1" width="638" height="418" rx="28" fill="#fff" stroke="#eef1f6" stroke-width="2"/>
+  <path d="M22 40V18c0-9 7-16 16-16h118c-7 12-17 19-33 22-24 3-37 18-42 38-5 18-17 31-37 38V40z" fill="url(#navy)"/>
+  <path d="M29 30c31 14 51 9 70-12 8-8 16-14 26-18" fill="none" stroke="#5592ed" stroke-opacity=".46" stroke-width="2" clip-path="url(#top)"/>
+  <path d="M618 380v22c0 9-7 16-16 16H484c7-12 17-19 33-22 24-3 37-18 42-38 5-18 17-31 37-38z" fill="url(#navy)"/>
+  <path d="M611 390c-31-14-51-9-70 12-8 8-16 14-26 18" fill="none" stroke="#5592ed" stroke-opacity=".46" stroke-width="2" clip-path="url(#bottom)"/>
+  <g transform="translate(239 75)">
+    <path d="M33 98c23-30 52-37 80-31 14 3 28 11 43 23-22-9-38-11-55-8-17 3-33 12-52 29z" fill="#fff" stroke="#183976" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M153 98c-23-30-52-37-80-31-14 3-28 11-43 23 22-9 38-11 55-8 17 3 33 12 52 29z" fill="#fff" stroke="#183976" stroke-width="5" stroke-linejoin="round"/>
+    <path d="m41 100 31-19 26 12-25 16zm56-7 29-19 19 14-23 13z" fill="#cfe2ff" stroke="#3774ca" stroke-width="3"/>
+    <path d="M92 93c-17-20-19-39-5-53 11-11 30-12 41 0 8 8 7 19-2 28l-19 19 16 15" fill="none" stroke="#17396f" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="92" cy="28" r="8" fill="#ec9212"/>
+    <path d="m79 42-10 13m10-13 12 11 11 3m-12-10-10 14-17 4m30-13 12-13m-33 4-9-8" fill="none" stroke="#da7116" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="46" cy="38" r="7" fill="#55a47c"/>
+    <path d="m43 48-10 16 12 7-8 11m6-28 15 9 13-4m-20 1-13 4-13-8" fill="none" stroke="#327253" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="145" cy="42" r="7" fill="#e76a27"/>
+    <path d="m140 52-13 12 9 11 12-5m-8-18 15 9 9-11m-22 16-12 13" fill="none" stroke="#db6328" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="92" y="147" text-anchor="middle" fill="#163568" font-family="Georgia,serif" font-size="18" font-weight="800" letter-spacing="-.5">PROJETO</text>
+    <text x="92" y="168" text-anchor="middle" fill="#163568" font-family="Georgia,serif" font-size="19" font-weight="800" letter-spacing="-.5">ALUNO / ATLETA</text>
+  </g>
+  <g transform="translate(96 332)">
+    <rect x="-7" y="-28" width="79" height="54" rx="7" fill="#ec1686"/>
+    <text x="32" y="-2" text-anchor="middle" fill="#fff000" font-family="Arial,sans-serif" font-size="18" font-weight="900">LAB</text>
+    <text x="32" y="14" text-anchor="middle" fill="#fff000" font-family="Arial,sans-serif" font-size="11" font-weight="900">JUV</text>
+    <text x="32" y="23" text-anchor="middle" fill="#fff" font-family="Arial,sans-serif" font-size="3.9" letter-spacing=".6">LABORATÓRIO DE JUVENTUDES</text>
+  </g>
+  <g transform="translate(264 330)">
+    <path d="M2-4c0-19 12-34 25-35s20 11 16 23C38 0 16 9 3 13m1-18 55 18m-30-41 27-4m-18 41L54-24" fill="none" stroke="#15213d" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="91" y="8" fill="#172440" font-family="Arial,sans-serif" font-size="34" font-weight="700" letter-spacing="-2">Prev</text>
+    <text x="155" y="8" fill="#52b64a" font-family="Arial,sans-serif" font-size="34" font-weight="700" letter-spacing="-2">io</text>
+  </g>
+  <g transform="translate(476 321)">
+    <text x="1" y="18" fill="#121619" font-family="Arial,sans-serif" font-size="17" font-weight="900" letter-spacing="1">SEJUV</text>
+    <path d="m92 3 11 6-4 18-7 9-7-9-4-18z" fill="#2f896d"/>
+    <path d="m92 8 7 4-3 13-4 6-4-6-3-13z" fill="#f3d87c"/>
+    <text x="112" y="7" fill="#111" font-family="Arial,sans-serif" font-size="6.8" font-weight="800">SECRETARIA DA</text>
+    <text x="112" y="16" fill="#111" font-family="Arial,sans-serif" font-size="6.8" font-weight="800">JUVENTUDE</text>
+    <text x="112" y="26" fill="#626262" font-family="Arial,sans-serif" font-size="5">GOVERNO DO ESTADO DO CEARÁ</text>
+  </g>
+</svg>

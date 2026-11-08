@@ -6,3 +6,6 @@ coverage/
 !.env.example
 frontend/.vercel/
 *.log
+backend/dist/
+*.tsbuildinfo
+_design-*-reference.pdf

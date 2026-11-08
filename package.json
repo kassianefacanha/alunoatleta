@@ -1,28 +1,27 @@
 {
   "name": "aluno-atleta",
+  "version": "1.0.0",
   "private": true,
-  "engines": {
-    "node": ">=20"
-  },
+  "type": "module",
   "workspaces": [
-    "backend",
-    "frontend"
+    "frontend",
+    "backend"
   ],
   "overrides": {
     "exceljs": {
-      "archiver": "^8.0.0",
-      "minimatch": "^11.0.1",
       "uuid": "^11.1.1"
     }
   },
   "scripts": {
-    "dev": "concurrently \"npm:dev:backend\" \"npm:dev:frontend\"",
-    "dev:backend": "npm --workspace backend run dev",
-    "dev:frontend": "npm --workspace frontend run dev",
-    "build": "npm run build --workspace backend && npm run build --workspace frontend",
-    "typecheck": "npm run typecheck --workspace backend && npm run typecheck --workspace frontend"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2"
+    "dev": "npm run dev --workspace @aluno-atleta/frontend",
+    "build": "npm run build --workspace @aluno-atleta/frontend",
+    "preview": "npm run preview --workspace @aluno-atleta/frontend",
+    "server": "npm run server --workspace @aluno-atleta/backend",
+    "server:build": "npm run server:build --workspace @aluno-atleta/backend",
+    "server:start": "npm run server:start --workspace @aluno-atleta/backend",
+    "seed": "npm run seed --workspace @aluno-atleta/backend",
+    "seed:clear": "npm run seed:clear --workspace @aluno-atleta/backend",
+    "assets:brand": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/generate-brand-assets.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/extract-project-banner.ps1",
+    "assets:registration-form": "node scripts/generate-registration-form.js"
   }
 }

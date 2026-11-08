@@ -1,91 +1,43 @@
-import type { NextFunction, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import { env } from '../config/env.js';
-import { Student, User, type UserRole } from '../models/index.js';
+import type { NextFunction, Request, Response } from "express";
+import jwt from "jsonwebtoken";
+import { z } from "zod";
+import { env } from "../config/environment.js";
+
+const tokenSchema = z.object({
+  sub: z.string().min(1),
+  role: z.enum(["ADM", "PROFESSOR", "ALUNO"]),
+});
 
 export interface AuthenticatedRequest extends Request {
-  auth?: { userId: string; role: UserRole };
+  user?: { id: string; role: "ADM" | "PROFESSOR" | "ALUNO" };
 }
 
-export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
-  const header = req.header('authorization');
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
-  if (!token) {
-    res.status(401).json({ error: 'Autenticação necessária.' });
+export function requireAuth(request: AuthenticatedRequest, response: Response, next: NextFunction) {
+  const header = request.header("authorization");
+  if (!header?.startsWith("Bearer ")) {
+    response.status(401).json({ message: "Entre na sua conta para continuar." });
     return;
   }
-
   try {
-    const claims = jwt.verify(token, env.JWT_ACCESS_SECRET) as jwt.JwtPayload;
-    if (typeof claims.sub !== 'string' || !['admin', 'teacher', 'student'].includes(String(claims.role))) {
-      res.status(401).json({ error: 'Token de acesso inválido.' });
+    const decoded = jwt.verify(header.slice(7), env.JWT_SECRET);
+    const parsed = tokenSchema.safeParse(decoded);
+    if (!parsed.success) {
+      response.status(401).json({ message: "Sua sessão expirou. Entre novamente." });
       return;
     }
-    req.auth = { userId: claims.sub, role: claims.role as UserRole };
+    request.user = { id: parsed.data.sub, role: parsed.data.role };
+    next();
   } catch {
-    res.status(401).json({ error: 'Token de acesso inválido ou expirado.' });
-    return;
+    response.status(401).json({ message: "Sua sessão expirou. Entre novamente." });
   }
-
-  try {
-    const activeUser = await User.findOne({
-      _id: req.auth.userId,
-      role: req.auth.role,
-      isActive: true,
-      isArchived: { $ne: true }
-    }).select('+refreshTokenHash').lean();
-    const activeStudent = req.auth.role === 'student'
-      ? await Student.exists({ userId: req.auth.userId, isArchived: { $ne: true } })
-      : true;
-    if (!activeUser?.refreshTokenHash || !activeStudent) {
-      res.status(401).json({ error: 'A conta ou sessão está inativa.' });
-      return;
-    }
-  } catch (error) {
-    next(error);
-    return;
-  }
-  next();
 }
 
-export function requireRoles(...roles: UserRole[]) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
-    if (!req.auth || !roles.includes(req.auth.role)) {
-      res.status(403).json({ error: 'Você não tem permissão para esta ação.' });
+export function allowRoles(...roles: Array<"ADM" | "PROFESSOR" | "ALUNO">) {
+  return (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
+    if (!request.user || !roles.includes(request.user.role)) {
+      response.status(403).json({ message: "Você não tem permissão para acessar este recurso." });
       return;
     }
     next();
   };
-}
-
-export function requireTeacherPermission(permission: string) {
-  return async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
-    if (req.auth?.role !== 'teacher') {
-      next();
-      return;
-    }
-    try {
-      const teacher = await User.findById(req.auth.userId).select('teacherPermissions').lean();
-      if (!teacher?.teacherPermissions.includes(permission)) {
-        res.status(403).json({ error: 'Esta permissão não está habilitada para sua conta.' });
-        return;
-      }
-      next();
-    } catch (error) {
-      next(error);
-    }
-  };
-}
-
-export async function requireApprovedStudent(req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> {
-  if (req.auth?.role !== 'student') {
-    next();
-    return;
-  }
-  const profile = await Student.findOne({ userId: req.auth.userId }).select('enrollmentStatus').lean();
-  if (profile?.enrollmentStatus !== 'approved') {
-    res.status(403).json({ error: 'Sua inscrição ainda não foi aprovada.' });
-    return;
-  }
-  next();
 }
