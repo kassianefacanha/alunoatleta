@@ -17,6 +17,35 @@ function isDuplicateKeyError(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
 }
 
+async function migrateLegacyAdmin(email: string): Promise<void> {
+  const normalizedEmail = email.trim().toLowerCase();
+  const legacyAdmin = await User.collection.findOne({
+    email: normalizedEmail,
+    role: "admin",
+    isActive: true,
+  });
+  if (!legacyAdmin) return;
+
+  const result = await User.collection.updateOne(
+    { _id: legacyAdmin._id, email: normalizedEmail, role: "admin", isActive: true },
+    [
+      {
+        $set: {
+          role: "ADM",
+          fullName: { $ifNull: ["$fullName", "Administração do Projeto"] },
+          deletedAt: null,
+          updatedAt: new Date(),
+        },
+      },
+      { $unset: ["isActive", "teacherPermissions", "refreshTokenHash"] },
+    ],
+  );
+  if (result.matchedCount !== 1) {
+    throw new Error("A conta administrativa antiga mudou durante a migração. Reinicie o serviço para tentar novamente.");
+  }
+  console.log("Conta administrativa antiga migrada para o perfil ADM.");
+}
+
 async function ensureAccount(account: DemoAccount, emailVariable: string, passwordVariable: string) {
   const email = account.email.trim().toLowerCase();
   const existing = await User.findOne({ email }).select("role deletedAt");
@@ -69,6 +98,10 @@ export async function ensureBootstrapAccounts() {
   ].filter((email): email is string => Boolean(email));
   if (new Set(emails).size !== emails.length) {
     throw new Error("ADMIN_EMAIL, TEACHER_EMAIL e TEST_STUDENT_EMAIL devem ser diferentes.");
+  }
+
+  if (env.ADMIN_EMAIL) {
+    await migrateLegacyAdmin(env.ADMIN_EMAIL);
   }
 
   if (!await User.exists({ role: "ADM", deletedAt: null })) {
