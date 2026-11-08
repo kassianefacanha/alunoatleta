@@ -17,6 +17,7 @@ import {
 } from "../models/index.js";
 import { recordAudit } from "../services/audit.service.js";
 import { getStudentDataExport } from "../services/student-data-export.service.js";
+import { getTestDataFilter } from "../services/testDataScope.js";
 
 const router = Router();
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, "Identificador inválido.");
@@ -29,15 +30,16 @@ function taskAllowsResponse(data: unknown) {
 
 router.get("/dashboard", async (request: AuthenticatedRequest, response, next) => {
   try {
+    const dataScope = getTestDataFilter(request.user!.isTestData);
     const [student] = await User.find({
       _id: request.user!.id,
       role: "ALUNO",
       status: "aprovado",
       deletedAt: null,
-      isTestData: { $ne: true },
+      ...dataScope,
     })
       .limit(1)
-      .select("fullName email age birthDate gender modality school address guardian classIds termsAcceptedAt termsVersion")
+      .select("fullName email age birthDate gender modality school address guardian classIds termsAcceptedAt termsVersion isTestData")
       .lean();
     if (!student) {
       response.status(404).json({ message: "Conta de aluno ativa não encontrada." });
@@ -47,29 +49,29 @@ router.get("/dashboard", async (request: AuthenticatedRequest, response, next) =
     const classIds = student.classIds ?? [];
     const classIdFilter = { $in: classIds };
     const [classes, tasks, materials, lessonPlans, events, evaluations, attendance, notifications] = await Promise.all([
-      Class.find({ _id: classIdFilter, isTestData: { $ne: true } })
+      Class.find({ _id: classIdFilter, ...dataScope })
         .select("name modality")
         .sort({ name: 1 })
         .lean(),
-      Task.find({ classId: classIdFilter, isTestData: { $ne: true } })
+      Task.find({ classId: classIdFilter, ...dataScope })
         .select("title description content classId dueDate createdAt data")
         .populate({ path: "classId", select: "name modality" })
         .sort({ dueDate: 1, createdAt: -1 })
         .limit(250)
         .lean(),
-      Material.find({ classId: classIdFilter, isTestData: { $ne: true } })
+      Material.find({ classId: classIdFilter, ...dataScope })
         .select("title description content type classId createdAt")
         .populate({ path: "classId", select: "name modality" })
         .sort({ createdAt: -1 })
         .limit(250)
         .lean(),
-      LessonPlan.find({ classId: classIdFilter, isTestData: { $ne: true } })
+      LessonPlan.find({ classId: classIdFilter, ...dataScope })
         .select("title description content date classId createdAt")
         .populate({ path: "classId", select: "name modality" })
         .sort({ date: -1, createdAt: -1 })
         .limit(250)
         .lean(),
-      Event.find({ classId: classIdFilter, isTestData: { $ne: true } })
+      Event.find({ classId: classIdFilter, ...dataScope })
         .select("title description date classId createdAt")
         .populate({ path: "classId", select: "name modality" })
         .sort({ date: 1, createdAt: -1 })
@@ -78,7 +80,7 @@ router.get("/dashboard", async (request: AuthenticatedRequest, response, next) =
       Evaluation.find({
         classId: classIdFilter,
         studentId: student._id,
-        isTestData: { $ne: true },
+        ...dataScope,
       })
         .select("title description date grade feedback classId createdAt")
         .populate({ path: "classId", select: "name modality" })
@@ -88,7 +90,7 @@ router.get("/dashboard", async (request: AuthenticatedRequest, response, next) =
       Attendance.find({
         classId: classIdFilter,
         studentId: student._id,
-        isTestData: { $ne: true },
+        ...dataScope,
       })
         .select("date present classId")
         .populate({ path: "classId", select: "name modality" })
@@ -98,7 +100,7 @@ router.get("/dashboard", async (request: AuthenticatedRequest, response, next) =
       Notification.find({
         studentId: student._id,
         classId: classIdFilter,
-        isTestData: { $ne: true },
+        ...dataScope,
       })
         .select("title description classId data createdAt")
         .populate({ path: "classId", select: "name modality" })
@@ -112,7 +114,7 @@ router.get("/dashboard", async (request: AuthenticatedRequest, response, next) =
         taskId: { $in: tasks.map((task) => task._id) },
         studentId: student._id,
         classId: classIdFilter,
-        isTestData: { $ne: true },
+        ...dataScope,
       })
         .select("taskId content grade feedback createdAt")
         .sort({ createdAt: -1 })
@@ -120,7 +122,7 @@ router.get("/dashboard", async (request: AuthenticatedRequest, response, next) =
       : [];
     const lgpdRequests = await LGPDRequest.find({
       userId: student._id,
-      isTestData: { $ne: true },
+      ...dataScope,
     })
       .select("type description status responseNote createdAt updatedAt reviewedAt")
       .sort({ createdAt: -1 })
@@ -199,7 +201,7 @@ router.patch("/profile", async (request: AuthenticatedRequest, response, next) =
       role: "ALUNO",
       status: "aprovado",
       deletedAt: null,
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     };
     const updates: Record<string, unknown> = {};
     if (result.data.fullName !== undefined) updates.fullName = result.data.fullName;
@@ -259,7 +261,7 @@ router.patch("/notifications/:id/read", async (request: AuthenticatedRequest, re
       role: "ALUNO",
       status: "aprovado",
       deletedAt: null,
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     }).limit(1).select("classIds");
     if (!student) {
       response.status(404).json({ message: "Conta de aluno ativa não encontrada." });
@@ -269,7 +271,7 @@ router.patch("/notifications/:id/read", async (request: AuthenticatedRequest, re
       _id: notificationId.data,
       studentId: student._id,
       classId: { $in: student.classIds },
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     };
     const updateResult = await Notification.updateOne(
       notificationFilter,
@@ -302,7 +304,7 @@ router.post("/lgpd-requests", async (request: AuthenticatedRequest, response, ne
       role: "ALUNO",
       status: "aprovado",
       deletedAt: null,
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     }).limit(1).select("_id");
     if (!student) {
       response.status(404).json({ message: "Conta de aluno ativa não encontrada." });
@@ -313,7 +315,7 @@ router.post("/lgpd-requests", async (request: AuthenticatedRequest, response, ne
       userId: student._id,
       type: parsed.data.type,
       description: parsed.data.description,
-      isTestData: false,
+      isTestData: request.user!.isTestData,
     });
     await recordAudit(request, "student_lgpd_request_create", "LGPDRequest", lgpdRequest.id, {
       type: lgpdRequest.type,
@@ -344,13 +346,13 @@ router.get("/lgpd-requests/:id/export", async (request: AuthenticatedRequest, re
       userId: request.user!.id,
       type: "portability",
       status: "completed",
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     }).select("_id");
     if (!approvedRequest) {
       response.status(403).json({ message: "O download só fica disponível após a aprovação da solicitação pela administração." });
       return;
     }
-    const data = await getStudentDataExport(request.user!.id);
+    const data = await getStudentDataExport(request.user!.id, request.user!.isTestData);
     if (!data) {
       response.status(404).json({ message: "Conta de aluno ativa não encontrada." });
       return;
@@ -378,7 +380,7 @@ router.post("/tasks/:id/response", async (request: AuthenticatedRequest, respons
       role: "ALUNO",
       status: "aprovado",
       deletedAt: null,
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     }).select("classIds");
     if (!student) {
       response.status(404).json({ message: "Conta de aluno ativa não encontrada." });
@@ -387,7 +389,7 @@ router.post("/tasks/:id/response", async (request: AuthenticatedRequest, respons
     const task = await Task.findOne({
       _id: taskId.data,
       classId: { $in: student.classIds },
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     }).select("classId data");
     if (!task) {
       response.status(404).json({ message: "Tarefa não encontrada nas suas turmas." });
@@ -402,7 +404,7 @@ router.post("/tasks/:id/response", async (request: AuthenticatedRequest, respons
       taskId: task._id,
       studentId: student._id,
       classId: task.classId,
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     };
     const existing = await TaskResponse.findOne(responseFilter).select("grade");
     if (existing?.grade !== undefined) {
@@ -418,7 +420,7 @@ router.post("/tasks/:id/response", async (request: AuthenticatedRequest, respons
           studentId: student._id,
           classId: task.classId,
           createdBy: student._id,
-          isTestData: false,
+          isTestData: request.user!.isTestData,
         },
       },
       { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },

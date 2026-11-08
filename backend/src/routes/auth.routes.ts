@@ -71,10 +71,10 @@ const registrationSchema = z.object({
   eligibilityConfirmed: z.boolean().optional(),
 });
 
-function createTokens(userId: string, role: "ADM" | "PROFESSOR" | "ALUNO") {
-  const accessToken = jwt.sign({ sub: userId, role }, env.JWT_SECRET, { expiresIn: "15m" });
+function createTokens(userId: string, role: "ADM" | "PROFESSOR" | "ALUNO", isTestData: boolean) {
+  const accessToken = jwt.sign({ sub: userId, role, isTestData }, env.JWT_SECRET, { expiresIn: "15m" });
   const refreshToken = jwt.sign(
-    { sub: userId, role, nonce: randomUUID() },
+    { sub: userId, role, isTestData, nonce: randomUUID() },
     env.JWT_REFRESH_SECRET,
     { expiresIn: "7d" },
   );
@@ -103,11 +103,13 @@ router.get("/registration-options", async (_request, response, next) => {
     const openClassIds = await Class.find({
       registrationStartsAt: { $lte: now },
       registrationEndsAt: { $gt: now },
+      isTestData: { $ne: true },
     }).distinct("_id");
     await Promise.all(openClassIds.map((id) => initializeEnrollmentCounter(id)));
     const classes = await Class.find({
       registrationStartsAt: { $lte: now },
       registrationEndsAt: { $gt: now },
+      isTestData: { $ne: true },
       $expr: { $lt: [{ $ifNull: ["$enrolledCount", 0] }, "$enrollmentLimit"] },
     })
       .select("name modality enrollmentLimit enrolledCount registrationEndsAt requirements requiresNeighborhoodSchool minimumAge maximumAge otherEligibilityRequirements")
@@ -149,10 +151,6 @@ router.post("/login", loginLimiter, async (request, response, next) => {
       response.status(401).json({ message: "E-mail ou senha incorretos." });
       return;
     }
-    if (user.isTestData && user.role !== "ADM") {
-      response.status(403).json({ message: "Esta conta de demonstração é destinada somente à visualização pela administração." });
-      return;
-    }
     if (user.role === "ALUNO" && user.status !== "aprovado") {
       response.status(403).json({
         message: user.status === "recusado"
@@ -161,7 +159,7 @@ router.post("/login", loginLimiter, async (request, response, next) => {
       });
       return;
     }
-    const tokens = createTokens(user.id, user.role as "ADM" | "PROFESSOR" | "ALUNO");
+    const tokens = createTokens(user.id, user.role as "ADM" | "PROFESSOR" | "ALUNO", user.isTestData);
     user.refreshTokenHash = createHash("sha256").update(tokens.refreshToken).digest("hex");
     await user.save();
     await AuditLog.create({
@@ -212,7 +210,7 @@ router.post("/register", registerLimiter, async (request, response, next) => {
       response.status(400).json({ message: "Confira a data de nascimento e a idade informadas." });
       return;
     }
-    const selectedClass = await Class.findById(data.classId)
+    const selectedClass = await Class.findOne({ _id: data.classId, isTestData: { $ne: true } })
       .select("modality requirements requiresNeighborhoodSchool minimumAge maximumAge otherEligibilityRequirements");
     if (!selectedClass) {
       response.status(400).json({ message: "A turma selecionada não está disponível." });
@@ -321,7 +319,7 @@ router.post("/refresh", async (request, response, next) => {
     }
     const user = await User.findOne({ _id: claims.sub, deletedAt: null }).select("+refreshTokenHash");
     const hash = createHash("sha256").update(token).digest("hex");
-    if (!user?.refreshTokenHash || user.refreshTokenHash !== hash || (user.isTestData && user.role !== "ADM")) {
+    if (!user?.refreshTokenHash || user.refreshTokenHash !== hash) {
       if (user) {
         user.refreshTokenHash = undefined;
         await user.save();
@@ -329,7 +327,7 @@ router.post("/refresh", async (request, response, next) => {
       response.status(401).json({ message: "Sua sessão expirou. Entre novamente." });
       return;
     }
-    const tokens = createTokens(user.id, user.role as "ADM" | "PROFESSOR" | "ALUNO");
+    const tokens = createTokens(user.id, user.role as "ADM" | "PROFESSOR" | "ALUNO", user.isTestData);
     user.refreshTokenHash = createHash("sha256").update(tokens.refreshToken).digest("hex");
     await user.save();
     setRefreshCookie(response, tokens.refreshToken);

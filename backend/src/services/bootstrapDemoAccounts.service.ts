@@ -1,4 +1,4 @@
-import { User } from "../models/index.js";
+import { Class, Modality, Task, User } from "../models/index.js";
 import { env } from "../config/environment.js";
 import { hashPassword, validatePassword } from "./password.service.js";
 
@@ -159,4 +159,71 @@ export async function ensureBootstrapAccounts() {
     status: "aprovado",
     isTestData: true,
   }, "TEST_STUDENT_EMAIL", "TEST_STUDENT_PASSWORD");
+
+  const [teacher, student] = await Promise.all([
+    User.findOne({
+      email: env.TEACHER_EMAIL.toLowerCase(),
+      role: "PROFESSOR",
+      isTestData: true,
+      deletedAt: null,
+    }),
+    User.findOne({
+      email: env.TEST_STUDENT_EMAIL.toLowerCase(),
+      role: "ALUNO",
+      isTestData: true,
+      deletedAt: null,
+    }),
+  ]);
+  if (!teacher || !student) {
+    console.warn("Espaço de teste não foi criado porque uma ou mais contas de demonstração não existem.");
+    return;
+  }
+
+  const modality = await Modality.findOneAndUpdate(
+    { name: "Futsal" },
+    { $setOnInsert: { name: "Futsal", description: "Modalidade do espaço de demonstração." } },
+    { upsert: true, new: true },
+  );
+  const demoClass = await Class.findOneAndUpdate(
+    { name: "Turma de demonstração", teacherIds: teacher._id, isTestData: true },
+    {
+      $setOnInsert: {
+        modality: modality.name,
+        teacherIds: [teacher._id],
+        enrollmentLimit: 30,
+        enrolledCount: 1,
+        enrollmentCounterInitialized: true,
+        isTestData: true,
+      },
+    },
+    { upsert: true, new: true },
+  );
+  await Promise.all([
+    User.updateOne(
+      { _id: teacher._id, isTestData: true },
+      { $set: { classIds: [demoClass._id] } },
+    ),
+    User.updateOne(
+      { _id: student._id, isTestData: true },
+      {
+        $set: { classIds: [demoClass._id], status: "aprovado", modality: modality.name },
+      },
+    ),
+    Task.updateOne(
+      { classId: demoClass._id, title: "Atividade de demonstração", isTestData: true },
+      {
+        $setOnInsert: {
+          title: "Atividade de demonstração",
+          description: "Envie uma resposta para testar a interação entre os painéis.",
+          classId: demoClass._id,
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          createdBy: teacher._id,
+          isTestData: true,
+          data: { allowResponse: true },
+        },
+      },
+      { upsert: true },
+    ),
+  ]);
+  console.log("Espaço isolado de demonstração preparado para os painéis de professor e aluno.");
 }

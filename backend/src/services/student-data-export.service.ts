@@ -11,18 +11,19 @@ import {
   TaskResponse,
   User,
 } from "../models/index.js";
+import { getTestDataFilter } from "./testDataScope.js";
 
 function taskAllowsResponse(data: unknown) {
   return typeof data === "object" && data !== null && "allowResponse" in data && data.allowResponse === true;
 }
 
-export async function getStudentDataExport(studentId: string) {
+export async function getStudentDataExport(studentId: string, isTestData: boolean) {
   const [student] = await User.find({
     _id: studentId,
     role: "ALUNO",
     status: "aprovado",
     deletedAt: null,
-    isTestData: { $ne: true },
+    ...getTestDataFilter(isTestData),
   })
     .limit(1)
     .select("fullName email age birthDate gender modality school address guardian classIds termsAcceptedAt termsVersion")
@@ -31,48 +32,49 @@ export async function getStudentDataExport(studentId: string) {
 
   const classIds = student.classIds ?? [];
   const classIdFilter = { $in: classIds };
+  const dataScope = getTestDataFilter(isTestData);
   const [classes, tasks, materials, lessonPlans, events, evaluations, attendance, notifications] = await Promise.all([
-    Class.find({ _id: classIdFilter, isTestData: { $ne: true } })
+    Class.find({ _id: classIdFilter, ...dataScope })
       .select("name modality")
       .sort({ name: 1 })
       .lean(),
-    Task.find({ classId: classIdFilter, isTestData: { $ne: true } })
+    Task.find({ classId: classIdFilter, ...dataScope })
       .select("title description content classId dueDate createdAt data")
       .populate({ path: "classId", select: "name modality" })
       .sort({ dueDate: 1, createdAt: -1 })
       .limit(250)
       .lean(),
-    Material.find({ classId: classIdFilter, isTestData: { $ne: true } })
+    Material.find({ classId: classIdFilter, ...dataScope })
       .select("title description content type classId createdAt")
       .populate({ path: "classId", select: "name modality" })
       .sort({ createdAt: -1 })
       .limit(250)
       .lean(),
-    LessonPlan.find({ classId: classIdFilter, isTestData: { $ne: true } })
+    LessonPlan.find({ classId: classIdFilter, ...dataScope })
       .select("title description content date classId createdAt")
       .populate({ path: "classId", select: "name modality" })
       .sort({ date: -1, createdAt: -1 })
       .limit(250)
       .lean(),
-    Event.find({ classId: classIdFilter, isTestData: { $ne: true } })
+    Event.find({ classId: classIdFilter, ...dataScope })
       .select("title description date classId createdAt")
       .populate({ path: "classId", select: "name modality" })
       .sort({ date: 1, createdAt: -1 })
       .limit(250)
       .lean(),
-    Evaluation.find({ classId: classIdFilter, studentId: student._id, isTestData: { $ne: true } })
+    Evaluation.find({ classId: classIdFilter, studentId: student._id, ...dataScope })
       .select("title description date grade feedback classId createdAt")
       .populate({ path: "classId", select: "name modality" })
       .sort({ date: -1, createdAt: -1 })
       .limit(250)
       .lean(),
-    Attendance.find({ classId: classIdFilter, studentId: student._id, isTestData: { $ne: true } })
+    Attendance.find({ classId: classIdFilter, studentId: student._id, ...dataScope })
       .select("date present classId")
       .populate({ path: "classId", select: "name modality" })
       .sort({ date: -1 })
       .limit(1000)
       .lean(),
-    Notification.find({ studentId: student._id, classId: classIdFilter, isTestData: { $ne: true } })
+    Notification.find({ studentId: student._id, classId: classIdFilter, ...dataScope })
       .select("title description classId data createdAt")
       .populate({ path: "classId", select: "name modality" })
       .sort({ createdAt: -1 })
@@ -84,13 +86,13 @@ export async function getStudentDataExport(studentId: string) {
       taskId: { $in: tasks.map((task) => task._id) },
       studentId: student._id,
       classId: classIdFilter,
-      isTestData: { $ne: true },
+      ...dataScope,
     })
       .select("taskId content grade feedback createdAt")
       .sort({ createdAt: -1 })
       .lean()
     : [];
-  const lgpdRequests = await LGPDRequest.find({ userId: student._id, isTestData: { $ne: true } })
+  const lgpdRequests = await LGPDRequest.find({ userId: student._id, ...dataScope })
     .select("type description status responseNote createdAt updatedAt reviewedAt")
     .sort({ createdAt: -1 })
     .limit(100)

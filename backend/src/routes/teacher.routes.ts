@@ -17,6 +17,7 @@ import {
 } from "../models/index.js";
 import { recordAudit } from "../services/audit.service.js";
 import { initializeEnrollmentCounter } from "../services/enrollment.service.js";
+import { getTestDataFilter } from "../services/testDataScope.js";
 
 const router = Router();
 const classSchema = z.object({
@@ -53,12 +54,12 @@ const workSchema = z.object({
   allowPlatformResponse: z.boolean().default(false),
 });
 
-async function getTeacherClassIds(teacherId: string) {
-  return Class.distinct("_id", { teacherIds: teacherId, isTestData: { $ne: true } });
+async function getTeacherClassIds(teacherId: string, isTestData: boolean) {
+  return Class.distinct("_id", { teacherIds: teacherId, ...getTestDataFilter(isTestData) });
 }
 
-async function teacherOwnsClass(classId: string, teacherId: string) {
-  return Class.exists({ _id: classId, teacherIds: teacherId, isTestData: { $ne: true } });
+async function teacherOwnsClass(classId: string, teacherId: string, isTestData: boolean) {
+  return Class.exists({ _id: classId, teacherIds: teacherId, ...getTestDataFilter(isTestData) });
 }
 
 router.use(requireAuth, allowRoles("PROFESSOR"));
@@ -67,27 +68,28 @@ router.get("/dashboard", async (request: AuthenticatedRequest, response, next) =
   try {
     const now = new Date();
     const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const classIds = await getTeacherClassIds(request.user!.id);
+    const dataScope = getTestDataFilter(request.user!.isTestData);
+    const classIds = await getTeacherClassIds(request.user!.id, request.user!.isTestData);
     const [classes, studentCount, pendingRegistrationCount, pendingStudents, attendance, upcomingEvents, tasks, pendingTasks] = await Promise.all([
-      Class.find({ _id: { $in: classIds } }).select("name modality").sort({ name: 1 }).lean(),
-      User.countDocuments({ role: "ALUNO", classIds: { $in: classIds }, status: "aprovado", deletedAt: null, isTestData: { $ne: true } }),
-      User.countDocuments({ role: "ALUNO", classIds: { $in: classIds }, status: "pendente", deletedAt: null, isTestData: { $ne: true } }),
-      User.find({ role: "ALUNO", classIds: { $in: classIds }, status: "pendente", deletedAt: null, isTestData: { $ne: true } })
+      Class.find({ _id: { $in: classIds }, ...dataScope }).select("name modality").sort({ name: 1 }).lean(),
+      User.countDocuments({ role: "ALUNO", classIds: { $in: classIds }, status: "aprovado", deletedAt: null, ...dataScope }),
+      User.countDocuments({ role: "ALUNO", classIds: { $in: classIds }, status: "pendente", deletedAt: null, ...dataScope }),
+      User.find({ role: "ALUNO", classIds: { $in: classIds }, status: "pendente", deletedAt: null, ...dataScope })
         .select("fullName email age modality status classIds createdAt")
         .sort({ createdAt: -1 })
         .limit(6)
         .lean(),
       Attendance.aggregate([
-        { $match: { classId: { $in: classIds }, date: { $gte: monthStart, $lte: now }, isTestData: { $ne: true } } },
+        { $match: { classId: { $in: classIds }, date: { $gte: monthStart, $lte: now }, ...dataScope } },
         { $group: { _id: "$classId", records: { $sum: 1 }, present: { $sum: { $cond: ["$present", 1, 0] } } } },
       ]),
-      Event.find({ classId: { $in: classIds }, date: { $gte: now }, isTestData: { $ne: true } })
+      Event.find({ classId: { $in: classIds }, date: { $gte: now }, ...dataScope })
         .select("title description date classId")
         .populate({ path: "classId", select: "name" })
         .sort({ date: 1 })
         .limit(5)
         .lean(),
-      Task.find({ classId: { $in: classIds }, createdBy: request.user!.id, isTestData: { $ne: true } })
+      Task.find({ classId: { $in: classIds }, createdBy: request.user!.id, ...dataScope })
         .select("title dueDate classId")
         .populate({ path: "classId", select: "name" })
         .sort({ dueDate: 1 })
@@ -95,9 +97,9 @@ router.get("/dashboard", async (request: AuthenticatedRequest, response, next) =
         .lean(),
       TaskResponse.countDocuments({
         classId: { $in: classIds },
-        taskId: { $in: await Task.find({ classId: { $in: classIds }, createdBy: request.user!.id }).distinct("_id") },
+        taskId: { $in: await Task.find({ classId: { $in: classIds }, createdBy: request.user!.id, ...dataScope }).distinct("_id") },
         grade: { $exists: false },
-        isTestData: { $ne: true },
+        ...dataScope,
       }),
     ]);
     const attendanceRecords = attendance.reduce((sum: number, row: { records: number }) => sum + row.records, 0);
@@ -135,7 +137,12 @@ router.get("/dashboard", async (request: AuthenticatedRequest, response, next) =
 
 router.get("/profile", async (request: AuthenticatedRequest, response, next) => {
   try {
-    const user = await User.findOne({ _id: request.user!.id, role: "PROFESSOR", deletedAt: null })
+    const user = await User.findOne({
+      _id: request.user!.id,
+      role: "PROFESSOR",
+      deletedAt: null,
+      ...getTestDataFilter(request.user!.isTestData),
+    })
       .select("fullName email classIds")
       .populate({ path: "classIds", select: "name modality" })
       .lean();
@@ -169,7 +176,12 @@ router.patch("/profile", async (request: AuthenticatedRequest, response, next) =
       return;
     }
     const user = await User.findOneAndUpdate(
-      { _id: request.user!.id, role: "PROFESSOR", deletedAt: null },
+      {
+        _id: request.user!.id,
+        role: "PROFESSOR",
+        deletedAt: null,
+        ...getTestDataFilter(request.user!.isTestData),
+      },
       { $set: { fullName: parsed.data.fullName, email: parsed.data.email.toLowerCase() } },
       { new: true, runValidators: true },
     ).select("fullName email");
@@ -186,7 +198,10 @@ router.patch("/profile", async (request: AuthenticatedRequest, response, next) =
 
 router.get("/classes", async (request: AuthenticatedRequest, response, next) => {
   try {
-    const classes = await Class.find({ teacherIds: request.user!.id, isTestData: { $ne: true } })
+    const classes = await Class.find({
+      teacherIds: request.user!.id,
+      ...getTestDataFilter(request.user!.isTestData),
+    })
       .sort({ name: 1 })
       .limit(200)
       .lean();
@@ -199,7 +214,7 @@ router.get("/classes", async (request: AuthenticatedRequest, response, next) => 
 router.get("/class-students", async (request: AuthenticatedRequest, response, next) => {
   try {
     const classId = objectIdSchema.safeParse(request.query.classId);
-    if (!classId.success || !await teacherOwnsClass(classId.data, request.user!.id)) {
+    if (!classId.success || !await teacherOwnsClass(classId.data, request.user!.id, request.user!.isTestData)) {
       response.status(400).json({ message: "Selecione uma turma válida." });
       return;
     }
@@ -208,7 +223,7 @@ router.get("/class-students", async (request: AuthenticatedRequest, response, ne
       classIds: classId.data,
       status: "aprovado",
       deletedAt: null,
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     })
       .select("fullName email status")
       .sort({ fullName: 1 })
@@ -238,9 +253,12 @@ router.post("/classes", async (request: AuthenticatedRequest, response, next) =>
       teacherIds: [new mongoose.Types.ObjectId(request.user!.id)],
       enrolledCount: 0,
       enrollmentCounterInitialized: true,
-      isTestData: false,
+      isTestData: request.user!.isTestData,
     });
-    await User.updateOne({ _id: request.user!.id }, { $addToSet: { classIds: sportsClass._id } });
+    await User.updateOne(
+      { _id: request.user!.id, ...getTestDataFilter(request.user!.isTestData) },
+      { $addToSet: { classIds: sportsClass._id } },
+    );
     await recordAudit(request, "teacher_class_create", "Class", sportsClass.id);
     response.status(201).json(sportsClass);
   } catch (error) {
@@ -264,12 +282,16 @@ router.patch("/classes/:id", async (request: AuthenticatedRequest, response, nex
       response.status(400).json({ message: "Selecione uma modalidade cadastrada." });
       return;
     }
+    if (!await teacherOwnsClass(id.data, request.user!.id, request.user!.isTestData)) {
+      response.status(404).json({ message: "Turma não encontrada ou sem acesso autorizado." });
+      return;
+    }
     await initializeEnrollmentCounter(id.data);
     const sportsClass = await Class.findOneAndUpdate(
       {
         _id: id.data,
         teacherIds: request.user!.id,
-        isTestData: { $ne: true },
+        ...getTestDataFilter(request.user!.isTestData),
         $expr: { $lte: ["$enrolledCount", parsed.data.enrollmentLimit] },
       },
       {
@@ -291,7 +313,11 @@ router.patch("/classes/:id", async (request: AuthenticatedRequest, response, nex
       { new: true, runValidators: true },
     );
     if (!sportsClass) {
-      if (await Class.exists({ _id: id.data, teacherIds: request.user!.id, isTestData: { $ne: true } })) {
+      if (await Class.exists({
+        _id: id.data,
+        teacherIds: request.user!.id,
+        ...getTestDataFilter(request.user!.isTestData),
+      })) {
         response.status(409).json({ message: "O limite de vagas não pode ficar abaixo das inscrições pendentes e dos alunos aprovados." });
       } else {
         response.status(404).json({ message: "Turma não encontrada ou sem acesso autorizado." });
@@ -309,7 +335,7 @@ router.get("/attendance", async (request: AuthenticatedRequest, response, next) 
   try {
     const classId = objectIdSchema.safeParse(request.query.classId);
     const date = z.string().date().safeParse(request.query.date);
-    if (!classId.success || !date.success || !await teacherOwnsClass(classId.data, request.user!.id)) {
+    if (!classId.success || !date.success || !await teacherOwnsClass(classId.data, request.user!.id, request.user!.isTestData)) {
       response.status(400).json({ message: "Selecione uma turma válida e uma data." });
       return;
     }
@@ -321,9 +347,13 @@ router.get("/attendance", async (request: AuthenticatedRequest, response, next) 
         classIds: classId.data,
         status: "aprovado",
         deletedAt: null,
-        isTestData: { $ne: true },
+        ...getTestDataFilter(request.user!.isTestData),
       }).select("fullName email").sort({ fullName: 1 }).lean(),
-      Attendance.find({ classId: classId.data, date: { $gte: start, $lt: end }, isTestData: { $ne: true } })
+      Attendance.find({
+        classId: classId.data,
+        date: { $gte: start, $lt: end },
+        ...getTestDataFilter(request.user!.isTestData),
+      })
         .select("studentId present")
         .lean(),
     ]);
@@ -355,7 +385,7 @@ router.post("/attendance", async (request: AuthenticatedRequest, response, next)
       return;
     }
     const { classId, date, records } = parsed.data;
-    if (!await teacherOwnsClass(classId, request.user!.id)) {
+    if (!await teacherOwnsClass(classId, request.user!.id, request.user!.isTestData)) {
       response.status(403).json({ message: "Você não tem acesso a esta turma." });
       return;
     }
@@ -369,7 +399,7 @@ router.post("/attendance", async (request: AuthenticatedRequest, response, next)
       classIds: classId,
       status: "aprovado",
       deletedAt: null,
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     });
     if (enrolledCount !== records.length) {
       response.status(400).json({ message: "A lista inclui alunos que não pertencem a esta turma." });
@@ -378,7 +408,12 @@ router.post("/attendance", async (request: AuthenticatedRequest, response, next)
     const dateValue = new Date(`${date}T00:00:00.000Z`);
     await Attendance.bulkWrite(records.map(({ studentId, present }) => ({
       updateOne: {
-        filter: { studentId, date: dateValue },
+        filter: {
+          classId,
+          studentId,
+          date: dateValue,
+          ...getTestDataFilter(request.user!.isTestData),
+        },
         update: {
           $set: {
             classId,
@@ -386,7 +421,7 @@ router.post("/attendance", async (request: AuthenticatedRequest, response, next)
             date: dateValue,
             present,
             registeredBy: request.user!.id,
-            isTestData: false,
+            isTestData: request.user!.isTestData,
           },
         },
         upsert: true,
@@ -402,12 +437,15 @@ router.post("/attendance", async (request: AuthenticatedRequest, response, next)
 router.get("/attendance/history", async (request: AuthenticatedRequest, response, next) => {
   try {
     const classId = objectIdSchema.safeParse(request.query.classId);
-    if (!classId.success || !await teacherOwnsClass(classId.data, request.user!.id)) {
+    if (!classId.success || !await teacherOwnsClass(classId.data, request.user!.id, request.user!.isTestData)) {
       response.status(400).json({ message: "Selecione uma turma válida." });
       return;
     }
     const rows = await Attendance.aggregate([
-      { $match: { classId: new mongoose.Types.ObjectId(classId.data), isTestData: { $ne: true } } },
+      { $match: {
+        classId: new mongoose.Types.ObjectId(classId.data),
+        ...getTestDataFilter(request.user!.isTestData),
+      } },
       { $group: { _id: "$date", total: { $sum: 1 }, present: { $sum: { $cond: ["$present", 1, 0] } } } },
       { $sort: { _id: -1 } },
       { $limit: 60 },
@@ -430,7 +468,7 @@ router.get("/work/:resource", async (request: AuthenticatedRequest, response, ne
       response.status(404).json({ message: "Área não encontrada." });
       return;
     }
-    const classIds = await getTeacherClassIds(request.user!.id);
+    const classIds = await getTeacherClassIds(request.user!.id, request.user!.isTestData);
     const classId = z.string().optional().parse(request.query.classId);
     if (classId && (!mongoose.isValidObjectId(classId) || !classIds.some((id) => String(id) === classId))) {
       response.status(403).json({ message: "Você não tem acesso a esta turma." });
@@ -438,7 +476,7 @@ router.get("/work/:resource", async (request: AuthenticatedRequest, response, ne
     }
     const filter: Record<string, unknown> = {
       classId: classId ?? { $in: classIds },
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     };
     if (resource.data === "tasks") filter.createdBy = request.user!.id;
     if (resource.data === "notifications") filter.createdBy = request.user!.id;
@@ -463,7 +501,7 @@ router.post("/work/:resource", async (request: AuthenticatedRequest, response, n
       response.status(400).json({ message: parsed.success ? "Área inválida." : parsed.error.issues[0]?.message ?? "Confira os dados." });
       return;
     }
-    if (!await teacherOwnsClass(parsed.data.classId, request.user!.id)) {
+    if (!await teacherOwnsClass(parsed.data.classId, request.user!.id, request.user!.isTestData)) {
       response.status(403).json({ message: "Você não tem acesso a esta turma." });
       return;
     }
@@ -478,7 +516,7 @@ router.post("/work/:resource", async (request: AuthenticatedRequest, response, n
         classIds: parsed.data.classId,
         status: "aprovado",
         deletedAt: null,
-        isTestData: { $ne: true },
+        ...getTestDataFilter(request.user!.isTestData),
       });
       if (!studentEnrolled) {
         response.status(400).json({ message: "O aluno selecionado não pertence a esta turma." });
@@ -499,7 +537,7 @@ router.post("/work/:resource", async (request: AuthenticatedRequest, response, n
       ...(parsed.data.feedback !== undefined && { feedback: parsed.data.feedback }),
       ...(resource.data === "tasks" && { data: { allowResponse: parsed.data.allowPlatformResponse } }),
       createdBy: request.user!.id,
-      isTestData: false,
+      isTestData: request.user!.isTestData,
     });
     await recordAudit(request, `teacher_${resource.data}_create`, resource.data, record.id);
     response.status(201).json(record);
@@ -517,13 +555,18 @@ router.patch("/work/:resource/:id", async (request: AuthenticatedRequest, respon
       response.status(400).json({ message: parsed.success ? "Identificador ou área inválida." : parsed.error.issues[0]?.message ?? "Confira os dados." });
       return;
     }
-    if (!await teacherOwnsClass(parsed.data.classId, request.user!.id)) {
+    if (!await teacherOwnsClass(parsed.data.classId, request.user!.id, request.user!.isTestData)) {
       response.status(403).json({ message: "Você não tem acesso a esta turma." });
       return;
     }
     const model = workModels[resource.data];
     const record = await model.findOneAndUpdate(
-      { _id: id.data, createdBy: request.user!.id, classId: { $in: await getTeacherClassIds(request.user!.id) } },
+      {
+        _id: id.data,
+        createdBy: request.user!.id,
+        classId: { $in: await getTeacherClassIds(request.user!.id, request.user!.isTestData) },
+        ...getTestDataFilter(request.user!.isTestData),
+      },
       {
         $set: {
           title: parsed.data.title,
@@ -563,7 +606,7 @@ router.delete("/work/:resource/:id", async (request: AuthenticatedRequest, respo
     const record = await workModels[resource.data].findOneAndDelete({
       _id: id.data,
       createdBy: request.user!.id,
-      classId: { $in: await getTeacherClassIds(request.user!.id) },
+      classId: { $in: await getTeacherClassIds(request.user!.id, request.user!.isTestData) },
     });
     if (!record) {
       response.status(404).json({ message: "Registro não encontrado ou sem acesso autorizado." });
@@ -589,7 +632,7 @@ router.post("/notifications", async (request: AuthenticatedRequest, response, ne
       return;
     }
     const { classId, studentIds } = parsed.data;
-    if (!await teacherOwnsClass(classId, request.user!.id)) {
+    if (!await teacherOwnsClass(classId, request.user!.id, request.user!.isTestData)) {
       response.status(403).json({ message: "Você não tem acesso a esta turma." });
       return;
     }
@@ -598,7 +641,7 @@ router.post("/notifications", async (request: AuthenticatedRequest, response, ne
       classIds: classId,
       status: "aprovado",
       deletedAt: null,
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
       ...(studentIds.length ? { _id: { $in: studentIds } } : {}),
     }).select("_id");
     if (studentIds.length && students.length !== new Set(studentIds).size) {
@@ -615,7 +658,7 @@ router.post("/notifications", async (request: AuthenticatedRequest, response, ne
       classId,
       studentId: student._id,
       createdBy: request.user!.id,
-      isTestData: false,
+      isTestData: request.user!.isTestData,
       data: { read: false },
     })));
     await recordAudit(request, "teacher_notification_create", "Notification", undefined, { classId, recipients: records.length });
@@ -627,16 +670,16 @@ router.post("/notifications", async (request: AuthenticatedRequest, response, ne
 
 router.get("/task-responses", async (request: AuthenticatedRequest, response, next) => {
   try {
-    const classIds = await getTeacherClassIds(request.user!.id);
+    const classIds = await getTeacherClassIds(request.user!.id, request.user!.isTestData);
     const taskIds = await Task.find({
       classId: { $in: classIds },
       createdBy: request.user!.id,
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     }).distinct("_id");
     const responses = await TaskResponse.find({
       taskId: { $in: taskIds },
       classId: { $in: classIds },
-      isTestData: { $ne: true },
+      ...getTestDataFilter(request.user!.isTestData),
     })
       .populate({ path: "taskId", select: "title dueDate" })
       .populate({ path: "studentId", select: "fullName email" })
@@ -662,11 +705,12 @@ router.patch("/task-responses/:id/grade", async (request: AuthenticatedRequest, 
       return;
     }
     const taskIds = await Task.find({
-      classId: { $in: await getTeacherClassIds(request.user!.id) },
+      classId: { $in: await getTeacherClassIds(request.user!.id, request.user!.isTestData) },
       createdBy: request.user!.id,
+      ...getTestDataFilter(request.user!.isTestData),
     }).distinct("_id");
     const taskResponse = await TaskResponse.findOneAndUpdate(
-      { _id: id.data, taskId: { $in: taskIds }, isTestData: { $ne: true } },
+      { _id: id.data, taskId: { $in: taskIds }, ...getTestDataFilter(request.user!.isTestData) },
       { $set: { grade: parsed.data.grade, feedback: parsed.data.feedback } },
       { new: true, runValidators: true },
     );
@@ -683,7 +727,8 @@ router.patch("/task-responses/:id/grade", async (request: AuthenticatedRequest, 
 
 router.get("/reports", async (request: AuthenticatedRequest, response, next) => {
   try {
-    const classIds = await getTeacherClassIds(request.user!.id);
+    const dataScope = getTestDataFilter(request.user!.isTestData);
+    const classIds = await getTeacherClassIds(request.user!.id, request.user!.isTestData);
     const from = z.string().date().optional().parse(request.query.from);
     const to = z.string().date().optional().parse(request.query.to);
     if (from && to && from > to) {
@@ -698,21 +743,21 @@ router.get("/reports", async (request: AuthenticatedRequest, response, next) => 
     const dueDateFilter = Object.keys(date).length ? { dueDate: date } : {};
     const createdAtFilter = Object.keys(date).length ? { createdAt: date } : {};
     const [attendance, evaluations, tasks, responses] = await Promise.all([
-      Attendance.find({ classId: { $in: classIds }, isTestData: { $ne: true }, ...dateFilter })
+      Attendance.find({ classId: { $in: classIds }, ...dataScope, ...dateFilter })
         .populate({ path: "studentId", select: "fullName" })
         .populate({ path: "classId", select: "name" })
         .sort({ date: -1 }).limit(5000).lean(),
-      Evaluation.find({ classId: { $in: classIds }, createdBy: request.user!.id, isTestData: { $ne: true }, ...dateFilter })
+      Evaluation.find({ classId: { $in: classIds }, createdBy: request.user!.id, ...dataScope, ...dateFilter })
         .populate({ path: "studentId", select: "fullName" })
         .populate({ path: "classId", select: "name" })
         .sort({ date: -1 }).limit(5000).lean(),
-      Task.find({ classId: { $in: classIds }, createdBy: request.user!.id, isTestData: { $ne: true }, ...dueDateFilter })
+      Task.find({ classId: { $in: classIds }, createdBy: request.user!.id, ...dataScope, ...dueDateFilter })
         .populate({ path: "classId", select: "name" })
         .sort({ dueDate: -1 }).limit(5000).lean(),
       TaskResponse.find({
         classId: { $in: classIds },
-        taskId: { $in: await Task.find({ classId: { $in: classIds }, createdBy: request.user!.id }).distinct("_id") },
-        isTestData: { $ne: true },
+        taskId: { $in: await Task.find({ classId: { $in: classIds }, createdBy: request.user!.id, ...dataScope }).distinct("_id") },
+        ...dataScope,
         ...createdAtFilter,
       })
         .populate({ path: "studentId", select: "fullName" })

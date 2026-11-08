@@ -6,10 +6,11 @@ import { env } from "../config/environment.js";
 const tokenSchema = z.object({
   sub: z.string().min(1),
   role: z.enum(["ADM", "PROFESSOR", "ALUNO"]),
+  isTestData: z.boolean().default(false),
 });
 
 export interface AuthenticatedRequest extends Request {
-  user?: { id: string; role: "ADM" | "PROFESSOR" | "ALUNO" };
+  user?: { id: string; role: "ADM" | "PROFESSOR" | "ALUNO"; isTestData: boolean };
 }
 
 export function requireAuth(request: AuthenticatedRequest, response: Response, next: NextFunction) {
@@ -25,7 +26,11 @@ export function requireAuth(request: AuthenticatedRequest, response: Response, n
       response.status(401).json({ message: "Sua sessão expirou. Entre novamente." });
       return;
     }
-    request.user = { id: parsed.data.sub, role: parsed.data.role };
+    request.user = {
+      id: parsed.data.sub,
+      role: parsed.data.role,
+      isTestData: parsed.data.isTestData,
+    };
     next();
   } catch {
     response.status(401).json({ message: "Sua sessão expirou. Entre novamente." });
