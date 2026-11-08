@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import { z } from "zod";
 import { env } from "./config/environment.js";
 import { connectDatabase } from "./config/database.js";
+import { ensureBootstrapAccounts } from "./services/bootstrapDemoAccounts.service.js";
 import { requireAuth } from "./middleware/auth.js";
 import { AuditLog, User } from "./models/index.js";
 import { authRouter } from "./routes/auth.routes.js";
@@ -125,6 +126,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 
 async function startServer() {
   await connectDatabase();
+  await ensureBootstrapAccounts();
   app.listen(env.PORT, () => {
     console.log(`API Aluno / Atleta disponível na porta ${env.PORT}.`);
   });

@@ -79,7 +79,7 @@ router.get("/:id/details", async (request: AuthenticatedRequest, response, next)
       filter.classIds = { $in: await Class.distinct("_id", { teacherIds: request.user.id }) };
     }
     const student = await User.findOne(filter)
-      .select("fullName email status rejectionReason rejectionReasons rejectionOtherReason age birthDate gender modality school address guardian classIds studentPhotoKey signedFormPdfKey termsAcceptedAt termsVersion createdAt")
+      .select("fullName email status rejectionReason rejectionReasons rejectionOtherReason age birthDate gender modality school address guardian classIds studentPhotoKey signedFormPdfKey termsAcceptedAt termsVersion createdAt isTestData")
       .lean<StudentDetailRecord & Record<string, unknown> | null>();
     if (!student) {
       response.status(404).json({ message: "Aluno não encontrado ou sem acesso autorizado." });

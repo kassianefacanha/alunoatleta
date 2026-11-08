@@ -45,6 +45,7 @@ interface Teacher {
   email: string;
   classIds: string[];
   createdAt: string;
+  isTestData?: boolean;
 }
 
 interface RegistrationCapacityStatus {
@@ -450,12 +451,16 @@ export function AdminManagementPage({ section, token, onRefresh }: AdminManageme
             {filteredTeachers.map((teacher) => (
               <article className="admin-management-row" key={teacher._id}>
                 <span className="admin-management-icon"><PersonAddAltRounded /></span>
-                <span className="admin-management-identity"><b>{teacher.fullName}</b><small>{teacher.email}</small></span>
+                <span className="admin-management-identity">
+                  <b>{teacher.fullName}</b>
+                  <small>{teacher.email}</small>
+                  {teacher.isTestData && <small>Conta de demonstração</small>}
+                </span>
                 <span className="admin-management-detail">{teacher.classIds.length} {teacher.classIds.length === 1 ? "turma" : "turmas"}</span>
                 <span className="admin-management-actions">
-                  <button aria-label={`Editar ${teacher.fullName}`} onClick={() => openEditor("team", teacher)}><EditOutlined /></button>
-                  <button aria-label={`Alterar senha de ${teacher.fullName}`} onClick={() => setPasswordTarget(teacher)}><KeyRounded /></button>
-                  <button aria-label={`Desativar ${teacher.fullName}`} onClick={() => { setFormError(""); setRemoval({ kind: "team", id: teacher._id, label: teacher.fullName }); }}><DeleteOutlineRounded /></button>
+                  {!teacher.isTestData && <button aria-label={`Editar ${teacher.fullName}`} onClick={() => openEditor("team", teacher)}><EditOutlined /></button>}
+                  {!teacher.isTestData && <button aria-label={`Alterar senha de ${teacher.fullName}`} onClick={() => setPasswordTarget(teacher)}><KeyRounded /></button>}
+                  {!teacher.isTestData && <button aria-label={`Desativar ${teacher.fullName}`} onClick={() => { setFormError(""); setRemoval({ kind: "team", id: teacher._id, label: teacher.fullName }); }}><DeleteOutlineRounded /></button>}
                 </span>
               </article>
             ))}
@@ -717,8 +722,8 @@ export function AdminManagementPage({ section, token, onRefresh }: AdminManageme
                   </div>
                 </fieldset>
                 <fieldset className="admin-teacher-picker"><legend>Professores da turma</legend>
-                  {!teachers.length && <span>Cadastre professores antes de associá-los a uma turma.</span>}
-                  {teachers.map((teacher) => (
+                  {!teachers.some((teacher) => !teacher.isTestData) && <span>Cadastre professores antes de associá-los a uma turma.</span>}
+                  {teachers.filter((teacher) => !teacher.isTestData).map((teacher) => (
                     <label key={teacher._id}><input type="checkbox" checked={classForm.teacherIds.includes(teacher._id)} onChange={(event) => setClassForm({
                       ...classForm,
                       teacherIds: event.target.checked

@@ -297,6 +297,7 @@ router.patch("/users/:id/password", async (request: AuthenticatedRequest, respon
       _id: id,
       role: { $in: ["ALUNO", "PROFESSOR"] },
       deletedAt: null,
+      isTestData: { $ne: true },
     }).select("fullName");
     if (!user) {
       response.status(404).json({ message: "Aluno ou professor não encontrado ou inativo." });
@@ -528,7 +529,7 @@ router.patch("/teachers/:id", async (request: AuthenticatedRequest, response, ne
       return;
     }
     const teacher = await User.findOneAndUpdate(
-      { _id: id, role: "PROFESSOR", deletedAt: null },
+      { _id: id, role: "PROFESSOR", deletedAt: null, isTestData: { $ne: true } },
       { $set: { fullName: parsed.data.fullName, email } },
       { new: true, runValidators: true },
     ).select("fullName email classIds createdAt");
@@ -546,9 +547,13 @@ router.patch("/teachers/:id", async (request: AuthenticatedRequest, response, ne
 router.delete("/teachers/:id", async (request: AuthenticatedRequest, response, next) => {
   try {
     const id = objectIdSchema.parse(request.params.id);
-    const currentTeacher = await User.findOne({ _id: id, role: "PROFESSOR", deletedAt: null }).select("fullName");
+    const currentTeacher = await User.findOne({ _id: id, role: "PROFESSOR", deletedAt: null }).select("fullName isTestData");
     if (!currentTeacher) {
       response.status(404).json({ message: "Professor não encontrado." });
+      return;
+    }
+    if (currentTeacher.isTestData) {
+      response.status(409).json({ message: "A conta de demonstração é gerenciada automaticamente e não pode ser desativada." });
       return;
     }
     if (await Class.exists({ teacherIds: id })) {
@@ -691,8 +696,11 @@ async function validateClassReferences(modality: string, teacherIds: string[]) {
     _id: { $in: teacherIds.map((id) => new mongoose.Types.ObjectId(id)) },
     role: "PROFESSOR",
     deletedAt: null,
+    isTestData: { $ne: true },
   });
-  return validTeacherCount === teacherIds.length ? null : "Um ou mais professores selecionados não estão ativos.";
+  return validTeacherCount === teacherIds.length
+    ? null
+    : "Um ou mais professores selecionados não estão ativos ou são contas de demonstração.";
 }
 
 router.post("/classes", async (request: AuthenticatedRequest, response, next) => {

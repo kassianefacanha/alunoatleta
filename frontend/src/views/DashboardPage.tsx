@@ -56,6 +56,7 @@ interface Student {
   age?: number;
   modality?: string;
   createdAt: string;
+  isTestData?: boolean;
 }
 
 interface StudentDetails extends Student {
@@ -629,7 +630,7 @@ function StudentTable({
         <tbody>
           {rows.map((student) => (
             <tr key={student._id}>
-              <td data-label="Aluno"><span className="admin-student-avatar">{student.fullName.trim().slice(0, 1).toUpperCase()}</span><span className="admin-student-identity"><b>{student.fullName}</b><small>{student.email}</small></span></td>
+              <td data-label="Aluno"><span className="admin-student-avatar">{student.fullName.trim().slice(0, 1).toUpperCase()}</span><span className="admin-student-identity"><b>{student.fullName}</b><small>{student.email}</small>{student.isTestData && <small>Conta de demonstração</small>}</span></td>
               <td data-label="Modalidade">{student.modality || "—"}</td>
               <td data-label="Idade">{student.age ? `${student.age} anos` : "—"}</td>
               <td data-label="Data da inscrição">{formatDate(student.createdAt)}</td>
@@ -637,7 +638,7 @@ function StudentTable({
               <td className="admin-student-actions" data-label="Ações">
                 <Button size="small" variant="text" aria-label={`Ver informações de ${student.fullName}`} onClick={() => onView(student)}><VisibilityOutlined /></Button>
                 {student.status === "pendente" && <Button size="small" variant="outlined" onClick={() => onReview(student)}>Analisar</Button>}
-                <Button size="small" variant="text" startIcon={<KeyRounded />} onClick={() => onSetPassword(student)}>Senha</Button>
+                        {!student.isTestData && <Button size="small" variant="text" startIcon={<KeyRounded />} onClick={() => onSetPassword(student)}>Senha</Button>}
               </td>
             </tr>
           ))}
@@ -672,6 +673,7 @@ function StudentDetailsContent({ student }: { student: StudentDetails }) {
         <div><dt>Inscrito em</dt><dd>{formatDate(student.createdAt)}</dd></div>
         <div><dt>Turma(s)</dt><dd>{student.classes.map(({ name }) => name).join(", ") || "—"}</dd></div>
       </dl>
+      {student.isTestData && <Alert severity="info">Este perfil é um dado de demonstração e fica visível somente para a administração.</Alert>}
       {student.classes.map((sportsClass) => (
         <section className="student-details-class" key={sportsClass.id}>
           <h3>Requisitos da turma {sportsClass.name}</h3>

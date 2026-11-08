@@ -149,6 +149,10 @@ router.post("/login", loginLimiter, async (request, response, next) => {
       response.status(401).json({ message: "E-mail ou senha incorretos." });
       return;
     }
+    if (user.isTestData && user.role !== "ADM") {
+      response.status(403).json({ message: "Esta conta de demonstração é destinada somente à visualização pela administração." });
+      return;
+    }
     if (user.role === "ALUNO" && user.status !== "aprovado") {
       response.status(403).json({
         message: user.status === "recusado"
@@ -317,7 +321,7 @@ router.post("/refresh", async (request, response, next) => {
     }
     const user = await User.findOne({ _id: claims.sub, deletedAt: null }).select("+refreshTokenHash");
     const hash = createHash("sha256").update(token).digest("hex");
-    if (!user?.refreshTokenHash || user.refreshTokenHash !== hash) {
+    if (!user?.refreshTokenHash || user.refreshTokenHash !== hash || (user.isTestData && user.role !== "ADM")) {
       if (user) {
         user.refreshTokenHash = undefined;
         await user.save();
