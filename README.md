@@ -83,7 +83,34 @@ Configure o CORS do bucket antes de usar inscrições e substitua o domínio de 
 
 ## Deploy
 
-Na Vercel, mantenha a raiz do projeto no repositório, execute `npm run build` e configure o diretório de saída como `frontend/dist`; defina `VITE_API_URL` para a API HTTPS. Publique a API no Render com a raiz do repositório, `npm install`, `npm run server:build` e `npm run server:start`. Configure as variáveis secretas e os domínios reais em `CLIENT_ORIGIN`. Aponte o MongoDB para uma implantação remota com TLS e configure a política CORS do R2 para somente o domínio de produção.
+#### Render (API)
+
+Crie um Web Service conectado ao repositório e use o Blueprint de `render.yaml` (ou configure os mesmos valores manualmente):
+
+- Build: `npm ci && npm run server:build`
+- Start: `npm run server:start`
+- Health check: `/api/v1/health`
+
+Configure `MONGODB_URI` com a conexão TLS do MongoDB Atlas; `JWT_SECRET` e `JWT_REFRESH_SECRET` devem ser segredos distintos (o Blueprint os gera); `CLIENT_ORIGIN` deve ser a origem HTTPS exata do site publicado; e `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` e `R2_ENDPOINT` para habilitar uploads. Mantenha as credenciais fora do repositório. No Atlas, permita conexões de saída do Render conforme a configuração de rede do seu plano.
+
+#### Vercel (site)
+
+Crie um projeto apontando para a raiz do repositório (`.`), não para `frontend`:
+
+- Build command: `npm run build`
+- Output directory: `frontend/dist`
+- Install command: `npm ci`
+- Variável de produção `VITE_API_URL`: `https://<dominio-da-api>/api/v1`
+
+O arquivo raiz `vercel.json` configura as rotas do app e os cabeçalhos. Faça um novo deploy após alterar variáveis de ambiente.
+
+#### Domínios, login e uploads
+
+Para que os cookies de sessão `SameSite=Strict` funcionem, use domínios próprios sob o mesmo domínio base e com HTTPS, por exemplo `app.seudominio.com` para a Vercel e `api.seudominio.com` para o Render. Defina `CLIENT_ORIGIN` com `https://app.seudominio.com`; use a URL completa da API em `VITE_API_URL`. Os domínios padrão `*.vercel.app` e `*.onrender.com` são sites diferentes e podem impedir a sessão de funcionar.
+
+No CORS do bucket R2, permita o domínio exato do site e os métodos/cabeçalhos necessários aos uploads (veja o exemplo na seção “CORS do bucket R2”). A API precisa das quatro variáveis R2 acima para uploads; não as configure na Vercel.
+
+Antes de liberar o sistema para uso real, ainda é necessário definir e executar a criação segura do primeiro usuário ADM: a seed disponível é apenas para demonstração e não roda em produção. Não use dados reais até validar autenticação, uploads, backups e os fluxos pendentes descritos em “Segurança e privacidade”.
 
 ## Segurança e privacidade
 

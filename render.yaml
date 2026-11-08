@@ -3,26 +3,22 @@ services:
     name: aluno-atleta-api
     runtime: node
     plan: starter
-    buildCommand: npm ci && npm run build --workspace backend
-    startCommand: npm run start --workspace backend
-    healthCheckPath: /health
+    buildCommand: npm ci && npm run server:build
+    startCommand: npm run server:start
+    healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
         value: production
       - key: MONGODB_URI
         sync: false
-      - key: JWT_ACCESS_SECRET
+      - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
-      - key: ADMIN_EMAIL
+      - key: CLIENT_ORIGIN
         sync: false
-      - key: ADMIN_PASSWORD
-        sync: false
-      - key: FRONTEND_ORIGIN
-        sync: false
-      - key: PRIVACY_NOTICE_VERSION
-        value: 2026-11-04
+      - key: TERMS_VERSION
+        value: 1.0
       - key: R2_ACCOUNT_ID
         sync: false
       - key: R2_ACCESS_KEY_ID
