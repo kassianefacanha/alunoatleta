@@ -2,6 +2,158 @@
 
 Aplicação de educação e esporte inspirada nas referências de login, inscrição e página inicial fornecidas no PDF. A identidade preserva o cartão branco, o logotipo centralizado na área de acesso, os tons de azul, bastante espaço em branco e a navegação discreta; a página inicial e o formulário adaptam a mesma identidade para celular e desktop. A logo da aplicação também aparece no ícone da aba.
 
+## Galeria de telas
+
+Capturas em computador (1440 px) e celular (390 px), incluindo páginas completas, painéis por perfil e alguns estados de interação. As telas autenticadas foram compostas com respostas de API e contas de demonstração exclusivamente no navegador; os nomes e endereços `.invalid` são fictícios. Nenhum cadastro foi criado, nenhuma credencial real foi usada e as capturas não representam dados de produção.
+
+### Painéis administrativos, do professor e do aluno
+
+#### Administração — visão geral
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/dashboard-adm-visao-geral-desktop.png" width="720" alt="Visão geral do painel administrativo em computador"> | <img src="docs/screenshots/dashboard-adm-visao-geral-mobile.png" width="195" alt="Visão geral do painel administrativo em celular"> |
+
+#### Professor — visão geral
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/dashboard-professor-visao-geral-desktop.png" width="720" alt="Visão geral do painel do professor em computador"> | <img src="docs/screenshots/dashboard-professor-visao-geral-mobile.png" width="195" alt="Visão geral do painel do professor em celular"> |
+
+#### Aluno — visão geral
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/dashboard-aluno-visao-geral-desktop.png" width="720" alt="Visão geral do painel do aluno em computador"> | <img src="docs/screenshots/dashboard-aluno-visao-geral-mobile.png" width="195" alt="Visão geral do painel do aluno em celular"> |
+
+<details>
+<summary>Mais telas dos painéis e funcionalidades</summary>
+
+#### Administração — inscrições
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/dashboard-adm-inscricoes-desktop.png" width="720" alt="Análise e gestão de inscrições em computador"> | <img src="docs/screenshots/dashboard-adm-inscricoes-mobile.png" width="195" alt="Análise e gestão de inscrições em celular"> |
+
+#### Professor — chamada e frequência
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/dashboard-professor-presencas-desktop.png" width="720" alt="Chamada e frequência no painel do professor em computador"> | <img src="docs/screenshots/dashboard-professor-presencas-mobile.png" width="195" alt="Chamada e frequência no painel do professor em celular"> |
+
+#### Professor — tarefas e respostas
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/dashboard-professor-tarefas-desktop.png" width="720" alt="Tarefas e respostas no painel do professor em computador"> | <img src="docs/screenshots/dashboard-professor-tarefas-mobile.png" width="195" alt="Tarefas e respostas no painel do professor em celular"> |
+
+#### Aluno — tarefas
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/dashboard-aluno-tarefas-desktop.png" width="720" alt="Tarefas no painel do aluno em computador"> | <img src="docs/screenshots/dashboard-aluno-tarefas-mobile.png" width="195" alt="Tarefas no painel do aluno em celular"> |
+
+#### Aluno — frequência
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/dashboard-aluno-frequencia-desktop.png" width="720" alt="Frequência no painel do aluno em computador"> | <img src="docs/screenshots/dashboard-aluno-frequencia-mobile.png" width="195" alt="Frequência no painel do aluno em celular"> |
+
+</details>
+
+### Página inicial
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/home-desktop.png" width="720" alt="Página inicial em computador"> | <img src="docs/screenshots/home-mobile.png" width="195" alt="Página inicial em celular"> |
+
+<details>
+<summary>Mais telas da página inicial</summary>
+
+#### Página completa
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/home-completa-desktop.png" width="720" alt="Página inicial completa em computador"> | <img src="docs/screenshots/home-completa-mobile.png" width="195" alt="Página inicial completa em celular"> |
+
+#### Metodologia
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/home-metodologia-desktop.png" width="720" alt="Metodologia em computador"> | <img src="docs/screenshots/home-metodologia-mobile.png" width="195" alt="Metodologia em celular"> |
+
+#### Modalidades
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/home-modalidades-desktop.png" width="720" alt="Modalidades em computador"> | <img src="docs/screenshots/home-modalidades-mobile.png" width="195" alt="Modalidades em celular"> |
+
+#### Parceiros
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/home-parceiros-desktop.png" width="720" alt="Parceiros em computador"> | <img src="docs/screenshots/home-parceiros-mobile.png" width="195" alt="Parceiros em celular"> |
+
+</details>
+
+<details>
+<summary>Entrar, recuperar senha e fazer inscrição</summary>
+
+#### Login
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/login-desktop.png" width="720" alt="Login em computador"> | <img src="docs/screenshots/login-mobile.png" width="195" alt="Login em celular"> |
+
+#### Solicitação de troca de senha
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/login-recuperar-senha-desktop.png" width="720" alt="Solicitação de troca de senha em computador"> | <img src="docs/screenshots/login-recuperar-senha-mobile.png" width="195" alt="Solicitação de troca de senha em celular"> |
+
+#### Inscrição
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/inscricao-desktop.png" width="720" alt="Formulário de inscrição em computador"> | <img src="docs/screenshots/inscricao-mobile.png" width="195" alt="Formulário de inscrição em celular"> |
+
+#### Formulário completo
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/inscricao-completa-desktop.png" width="720" alt="Formulário completo em computador"> | <img src="docs/screenshots/inscricao-completa-mobile.png" width="195" alt="Formulário completo em celular"> |
+
+</details>
+
+<details>
+<summary>Acompanhar inscrição, termos e privacidade</summary>
+
+#### Acompanhamento da inscrição
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/status-inscricao-desktop.png" width="720" alt="Acompanhamento da inscrição em computador"> | <img src="docs/screenshots/status-inscricao-mobile.png" width="195" alt="Acompanhamento da inscrição em celular"> |
+
+#### Confirmação de recebimento
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/status-inscricao-recebida-desktop.png" width="720" alt="Confirmação de recebimento em computador"> | <img src="docs/screenshots/status-inscricao-recebida-mobile.png" width="195" alt="Confirmação de recebimento em celular"> |
+
+#### Termos de inscrição
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/termos-desktop.png" width="720" alt="Termos de inscrição em computador"> | <img src="docs/screenshots/termos-mobile.png" width="195" alt="Termos de inscrição em celular"> |
+
+#### Política de privacidade
+
+| Computador | Celular |
+|:--:|:--:|
+| <img src="docs/screenshots/privacidade-desktop.png" width="720" alt="Política de privacidade em computador"> | <img src="docs/screenshots/privacidade-mobile.png" width="195" alt="Política de privacidade em celular"> |
+
+</details>
+
 ## Requisitos
 
 - Node.js 20.19+ ou 22.12+ e npm.
