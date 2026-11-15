@@ -2,6 +2,47 @@
 
 Aplicação de educação e esporte inspirada nas referências de login, inscrição e página inicial fornecidas no PDF. A identidade preserva o cartão branco, o logotipo centralizado na área de acesso, os tons de azul, bastante espaço em branco e a navegação discreta; a página inicial e o formulário adaptam a mesma identidade para celular e desktop. A logo da aplicação também aparece no ícone da aba.
 
+## Sobre o projeto
+
+O Aluno / Atleta é uma plataforma web de apoio ao projeto de educação e esporte do Alto da Mangueira, em Maracanaú, Ceará. Seu objetivo é aproximar inscrição, organização das turmas e acompanhamento das atividades esportivas e educativas em um único sistema. A aplicação contempla um site público e áreas autenticadas, com interfaces adaptáveis a computador e celular.
+
+O sistema organiza o acesso por perfil:
+
+| Perfil | O que pode fazer |
+|---|---|
+| Público e responsável | Conhecer o projeto, consultar modalidades, ler os documentos, iniciar uma inscrição e acompanhar as orientações de status. |
+| Administração (ADM) | Acompanhar indicadores, revisar inscrições, administrar equipe, modalidades, turmas e vagas, publicar conteúdo, tratar solicitações e consultar relatórios e auditoria. |
+| Professor | Acessar as próprias turmas, acompanhar alunos, revisar inscrições vinculadas, registrar frequência, criar atividades e conteúdos, enviar comunicados e acompanhar avaliações e relatórios. |
+| Aluno aprovado | Consultar suas turmas, tarefas, materiais, planos, eventos, notas, frequência e notificações; atualizar os dados permitidos e registrar solicitações relacionadas aos próprios dados. |
+
+### Fluxo de inscrição
+
+1. O visitante consulta os critérios, as turmas abertas e as vagas disponíveis.
+2. O aluno, com apoio do responsável, preenche os dados pessoais, escolares e de contato, escolhe uma turma elegível, anexa a foto e a ficha assinada e aceita os termos vigentes.
+3. A inscrição é recebida como pendente e pode ser acompanhada pelo fluxo público de status. O envio não significa aprovação automática.
+4. Um ADM ou um professor autorizado para a turma analisa os dados e pode aprovar ou recusar a inscrição, registrando o motivo quando aplicável.
+5. Após a aprovação, o aluno pode entrar na área correspondente e consultar os conteúdos e atividades disponíveis para suas turmas.
+
+### Funcionalidades por área
+
+- **Site público:** apresentação do projeto e da metodologia, modalidades e parceiros, informações de contato, chamada para inscrição e acesso à ficha, aos termos e à política de privacidade.
+- **Inscrição:** formulário com dados do aluno e do responsável, seleção de turma conforme disponibilidade e requisitos, upload de foto JPG/PNG e ficha PDF assinada, aceite versionado dos termos e validações antes do envio.
+- **Administração:** painel de indicadores; análise e pesquisa de inscrições; controles globais de abertura e capacidade; gestão de professores, modalidades, turmas e conteúdo público; revisão de pedidos de senha e solicitações de privacidade; geração de relatórios CSV, XLSX e PDF; e consulta ao log de auditoria.
+- **Professor:** resumo de turmas e atividades; chamada e histórico de frequência; consulta de alunos; criação e manutenção de tarefas, materiais, planos de aula, eventos e avaliações; leitura e correção de respostas; envio de notificações; relatórios e manutenção do perfil.
+- **Aluno:** resumo de atividades, frequência e avaliações; consulta e resposta a tarefas que permitem envio pela plataforma; leitura de materiais, planos, eventos e comunicados; atualização dos dados de perfil permitidos; e acompanhamento de solicitações de privacidade da própria conta.
+
+O conteúdo público, os limites de cadastro e a disponibilidade das turmas são administráveis. Regras de idade, localização e requisitos de uma turma são exibidas durante a inscrição para apoiar a análise da equipe; requisitos em texto livre dependem de interpretação humana. Consulte o [catálogo de rotas e permissões da API](./docs/apis.md) para detalhes de cada operação.
+
+### Tecnologias e arquitetura
+
+- **Frontend:** React 19, TypeScript, Vite, React Router e Material UI; páginas e componentes reutilizáveis ficam em `frontend/src`.
+- **API:** Node.js, Express 5 e TypeScript; rotas HTTP versionadas ficam em `backend/src/routes`, com autenticação, validação, autorização e integração com os serviços.
+- **Persistência:** MongoDB por meio do Mongoose para contas, inscrições, turmas, atividades, configurações e eventos de auditoria.
+- **Arquivos:** Cloudflare R2 privado para fichas, fotos e documentos publicados; o navegador envia arquivos por URLs temporárias, sem receber as credenciais do bucket.
+- **Implantação prevista:** frontend na Vercel e API no Render, conectados a MongoDB e R2 configurados pelo operador.
+
+O cliente não substitui as regras de autorização: as operações protegidas são verificadas também pela API. A visão geral das permissões e dos controles de privacidade está em [`docs/seguranca.md`](./docs/seguranca.md); as fontes de dados e categorias de informação estão em [`docs/inventario-dados.md`](./docs/inventario-dados.md).
+
 ## Galeria de telas
 
 Capturas em computador (1440 px) e celular (390 px), incluindo páginas completas, painéis por perfil e alguns estados de interação. As telas autenticadas foram compostas com respostas de API e contas de demonstração exclusivamente no navegador; os nomes e endereços `.invalid` são fictícios. Nenhum cadastro foi criado, nenhuma credencial real foi usada e as capturas não representam dados de produção.
@@ -180,23 +221,29 @@ O cliente encaminha `/api` ao servidor local. Para outra origem, configure `VITE
 - `scripts/generate-brand-assets.ps1`: fonte regenerável dos PNGs. Execute `npm run assets:brand`.
 - `scripts/generate-registration-form.js`: fonte da ficha imprimível. Execute `npm run assets:registration-form`.
 
-## Estrutura
+## Estrutura do repositório
 
-- `frontend/src/components/`: elementos atômicos de UI compartilhados, como marca e rótulos.
-- `frontend/src/views/`: páginas públicas, login, inscrição e status.
-- `frontend/src/routes/`: mapeamento de rotas públicas.
-- `frontend/src/services/`: chamadas HTTP e integrações.
-- `frontend/public/`: imagens de marca, ícone da aba e ficha de inscrição.
-- `frontend/package.json`: dependências e comandos exclusivos do cliente web.
-- `backend/src/models/`: esquemas Mongoose e catálogo de domínios.
-- `backend/src/routes/`: rotas HTTP versionadas.
-- `backend/src/middleware/`: autenticação e autorização RBAC.
-- `backend/src/services/`: senhas, auditoria e URLs de armazenamento.
-- `backend/src/seed/`: dados de demonstração e limpeza explícita.
-- `backend/package.json`: dependências e comandos exclusivos da API.
-- `backend/.env.example`: exemplo de configuração do backend.
-- `package.json`: workspaces e comandos que orquestram frontend e backend.
-- `docs/`: inventário de dados, permissões, API, segurança e incidentes.
+```text
+frontend/
+  public/             Marca, documentos públicos e recursos estáticos
+  src/
+    components/       Componentes compartilhados
+    routes/           Rotas da aplicação React
+    services/         Chamadas à API
+    views/            Páginas públicas e painéis por perfil
+backend/
+  src/
+    config/           Ambiente e conexão com MongoDB
+    middleware/       Autenticação, autorização e validações
+    models/           Schemas e modelos Mongoose
+    routes/            Endpoints HTTP versionados
+    seed/              Dados de demonstração e limpeza explícita
+    services/          Regras de negócio, auditoria, uploads e exportações
+docs/                  API, segurança, dados, permissões e incidentes
+scripts/               Geração de marca e ficha de inscrição
+```
+
+O `package.json` da raiz configura os workspaces npm e os comandos usados no desenvolvimento, build, seed e geração dos materiais do projeto. Consulte também [`docs/apis.md`](./docs/apis.md) para a API e [`docs/incidentes.md`](./docs/incidentes.md) para o procedimento documentado de resposta a incidentes.
 
 **Nomenclatura:** páginas e componentes React usam `PascalCase`; funções, propriedades e serviços usam `camelCase`; nomes de URL usam minúsculas e hífens. Mantenha elementos visuais reutilizáveis em `components`, páginas compostas em `views`, lógica de HTTP em `services` e acesso ao MongoDB somente a partir do backend.
 
@@ -272,7 +319,9 @@ Antes de liberar o sistema para uso real, ainda é necessário definir e executa
 
 As evidências e as limitações de implementação estão em `docs/seguranca.md` e nas demais referências de [`docs/`](./docs/). A aplicação usa hash bcrypt com fator 12, cookies refresh HttpOnly com rotação, validação Zod, limitador de autenticação, autorização de rotas, presigned URLs privados de curta duração, dados de acesso de teste segregados nas listagens e registros de auditoria. As credenciais do R2 permanecem no servidor.
 
-**Escopo atual:** o painel ADM oferece indicadores e análise de inscrições, gestão de professores, modalidades e turmas, solicitações de recuperação de senha e um gerador de relatórios com seleção de conjuntos de dados, colunas, filtros e exportação CSV, Excel ou PDF. O ADM pode redefinir senhas de alunos e professores; a recuperação pública não altera senhas automaticamente e requer confirmação de identidade pela equipe. As modalidades cadastradas exibem ícone e cor escolhidos pela administração no site. A API protege essas operações com autorização ADM, registra exportações e alterações de senha na auditoria e impede remover turmas ou modalidades com vínculos existentes. Painéis completos de professor/aluno, frequência operacional, demais fluxos de gestão e solicitações LGPD ainda precisam ser implementados antes de operar o projeto com pessoas reais. A base não representa, por si só, conformidade integral com a LGPD; revise `docs/seguranca.md` e valide bases legais, retenção e fornecedores com o responsável por proteção de dados.
+**Escopo e prontidão:** as áreas de ADM, professor e aluno incluem painéis e fluxos para as funcionalidades descritas acima. Os relatórios administrativos podem ser configurados por conjuntos de dados, colunas e filtros e exportados em CSV, Excel ou PDF. A recuperação pública de senha não altera senhas automaticamente; a equipe deve confirmar a identidade antes de atender o pedido. A API implementa autorização por perfil e, para operações de turma, restringe o acesso às turmas e aos registros autorizados.
+
+Isso não equivale a uma certificação de segurança ou conformidade legal, nem significa que a implantação esteja pronta para receber dados reais. O projeto ainda precisa de testes automatizados mais abrangentes, revisão das configurações de produção, definição e validação dos processos de retenção e atendimento aos direitos dos titulares e análise dos termos e políticas pelo controlador. Leia [`docs/seguranca.md`](./docs/seguranca.md) e valide as bases legais, os fornecedores, os backups e os procedimentos operacionais antes de qualquer uso com pessoas reais.
 
 ## Contribuição
 
